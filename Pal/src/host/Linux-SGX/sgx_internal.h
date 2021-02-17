@@ -48,6 +48,7 @@ struct pal_enclave {
     unsigned long thread_num;
     unsigned long rpc_thread_num;
     unsigned long ssa_frame_size;
+    bool edmm_enable_heap;
     bool nonpie_binary;
     bool remote_attestation_enabled;
     bool use_epid_attestation; /* Valid only if `remote_attestation_enabled` is true, selects
@@ -66,6 +67,7 @@ struct pal_enclave {
 
 extern struct pal_enclave g_pal_enclave;
 
+void prot_flags_to_permissions_str(char* p, int prot);
 int open_sgx_driver(bool need_gsgx);
 bool is_wrfsbase_supported(void);
 
@@ -74,7 +76,16 @@ int read_enclave_sigstruct(int sigfile, sgx_arch_enclave_css_t* sig);
 
 int create_enclave(sgx_arch_secs_t* secs, sgx_arch_token_t* token);
 
-enum sgx_page_type { SGX_PAGE_SECS, SGX_PAGE_TCS, SGX_PAGE_REG };
+#if 0
+enum sgx_page_type {
+    SGX_PAGE_TYPE_SECS,
+    SGX_PAGE_TYPE_TCS,
+    SGX_PAGE_TYPE_REG,
+    SGX_PAGE_TYPE_VA,
+    SGX_PAGE_TYPE_TRIM
+};
+#endif
+
 int add_pages_to_enclave(sgx_arch_secs_t* secs, void* addr, void* user_addr, unsigned long size,
                          enum sgx_page_type type, int prot, bool skip_eextend, const char* comment);
 

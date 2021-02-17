@@ -114,7 +114,8 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         pal_linux_main(READ_ONCE(ms->ms_libpal_uri), READ_ONCE(ms->ms_libpal_uri_len),
                        READ_ONCE(ms->ms_args), READ_ONCE(ms->ms_args_size), READ_ONCE(ms->ms_env),
                        READ_ONCE(ms->ms_env_size), READ_ONCE(ms->ms_parent_stream_fd),
-                       READ_ONCE(ms->ms_qe_targetinfo), topo_info);
+                       READ_ONCE(ms->ms_qe_targetinfo), topo_info,
+                       READ_ONCE(ms->ms_edmm_enable_heap));
     } else {
         // ENCLAVE_START already called (maybe successfully, maybe not), so
         // only valid ecall is THREAD_START.

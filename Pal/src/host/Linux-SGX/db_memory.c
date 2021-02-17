@@ -38,15 +38,22 @@ int _DkVirtualMemoryAlloc(void** addr_ptr, uint64_t size, pal_alloc_flags_t allo
         return -PAL_ERROR_INVAL;
 
     void* addr = *addr_ptr;
-
-    void* mem = get_enclave_pages(addr, size, alloc_type & PAL_ALLOC_INTERNAL);
+    pal_prot_flags_t req_prot = (prot & PAL_PROT_WRITE) ? prot : prot | PAL_PROT_READ | PAL_PROT_WRITE;
+    void* mem = get_enclave_pages(addr, size, req_prot, alloc_type & PAL_ALLOC_INTERNAL);
     if (!mem)
         return addr ? -PAL_ERROR_DENIED : -PAL_ERROR_NOMEM;
 
+    /* Even though SGX2 always zeros the dynamically added pages, there are few pages that aren't
+     * dynamically allocated. So for such cases, we still memset to the zero the pages. */
     /* initialize contents of new memory region to zero (LibOS layer expects zeroed-out memory) */
     memset(mem, 0, size);
 
     *addr_ptr = mem;
+
+    /* Reset to original request. Work around for memset to succeed. */
+    if (prot != req_prot)
+        _DkVirtualMemoryProtect(addr, size, prot);
+
     return 0;
 }
 
@@ -64,11 +71,12 @@ int _DkVirtualMemoryFree(void* addr, uint64_t size) {
 }
 
 int _DkVirtualMemoryProtect(void* addr, uint64_t size, pal_prot_flags_t prot) {
-    __UNUSED(addr);
-    __UNUSED(size);
-    __UNUSED(prot);
 
+    int ret;
     assert(WITHIN_MASK(prot, PAL_PROT_MASK));
+
+    if (!size)
+        return -PAL_ERROR_INVAL;
 
 #ifdef ASAN
     if (sgx_is_completely_within_enclave(addr, size)) {
@@ -80,12 +88,19 @@ int _DkVirtualMemoryProtect(void* addr, uint64_t size, pal_prot_flags_t prot) {
     }
 #endif
 
-    static struct atomic_int at_cnt = {.counter = 0};
-    int64_t t = 0;
-    if (__atomic_compare_exchange_n(&at_cnt.counter, &t, 1, /*weak=*/false, __ATOMIC_SEQ_CST,
-                                    __ATOMIC_RELAXED))
-        log_warning("DkVirtualMemoryProtect is unimplemented in Linux-SGX PAL");
-    return 0;
+    if (g_pal_public_state.edmm_enable_heap) {
+        ret = update_enclave_page_permissions(addr, size, prot);
+    } else {
+        static struct atomic_int at_cnt = {.counter = 0};
+        int64_t t = 0;
+        if (__atomic_compare_exchange_n(&at_cnt.counter, &t, 1, /*weak=*/false, __ATOMIC_SEQ_CST,
+                                        __ATOMIC_RELAXED))
+            log_warning("DkVirtualMemoryProtect is unimplemented in Linux-SGX PAL");
+
+        ret = 0;
+    }
+
+    return ret;
 }
 
 uint64_t _DkMemoryQuota(void) {

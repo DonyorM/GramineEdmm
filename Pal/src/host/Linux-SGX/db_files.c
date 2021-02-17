@@ -286,7 +286,7 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
         return -PAL_ERROR_DENIED;
     }
 
-    mem = get_enclave_pages(mem, size, /*is_pal_internal=*/false);
+    mem = get_enclave_pages(mem, size, prot, /*is_pal_internal=*/false);
     if (!mem)
         return -PAL_ERROR_NOMEM;
 
@@ -313,6 +313,21 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
             goto out;
         }
 
+        /* For trusted files, we copy and verify the contents but the application might have
+         * requested page permissions without write access.In such cases, relax the permission to
+         * have write permission and then revert it to original request. */
+        pal_prot_flags_t req_prot;
+        if (g_pal_public_state.edmm_enable_heap) {
+            req_prot = (prot & PAL_PROT_WRITE) ? prot : prot | PAL_PROT_READ | PAL_PROT_WRITE;
+            ret = update_enclave_page_permissions(mem, size, req_prot);
+            if (ret < 0) {
+                log_error("file_map - updating enclave page permissions returned %d", ret);
+                goto out;
+            }
+        } else {
+            req_prot = prot;
+        }
+
         ret = copy_and_verify_trusted_file(handle->file.realpath, mem, handle->file.umem,
                                            aligned_offset, aligned_end, offset, end, chunk_hashes,
                                            handle->file.total);
@@ -325,6 +340,15 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
         if (size > bytes_filled) {
             /* file ended before all mmapped memory was filled -- remaining memory must be zeroed */
             memset(mem + bytes_filled, 0, size - bytes_filled);
+        }
+
+        /* If permissions were modified, revert it to original */
+        if (g_pal_public_state.edmm_enable_heap && (prot != req_prot)) {
+            ret = update_enclave_page_permissions(mem, size, prot);
+            if (ret < 0) {
+                log_error("file_map - updating enclave page permissions returned %d", ret);
+                goto out;
+            }
         }
     } else {
         /* case of allowed file: simply read from underlying file descriptor into enclave memory */

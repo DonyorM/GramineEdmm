@@ -1947,3 +1947,73 @@ int ocall_sched_getaffinity(void* tcs, size_t cpumask_size, void* cpu_mask) {
     sgx_reset_ustack(old_ustack);
     return retval;
 }
+
+int ocall_trim_epc_pages(void* addr, size_t size, enum sgx_page_type type) {
+    int retval = 0;
+    ms_ocall_sgx_page_modt_t* ms;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        retval = -ENOMEM;
+        goto out;
+    }
+
+    WRITE_ONCE(ms->addr, (unsigned long long) addr);
+    WRITE_ONCE(ms->length, (unsigned long long) size);
+    WRITE_ONCE(ms->page_type, (unsigned long long)type);
+
+    do {
+        retval = sgx_exitless_ocall(OCALL_TRIM_EPC_PAGES, ms);
+    } while (retval == -EINTR);
+
+out:
+    sgx_reset_ustack(old_ustack);
+    return retval;
+}
+
+int ocall_remove_trimmed_pages(void* addr, size_t size) {
+    int retval = 0;
+    ms_ocall_sgx_page_remove_t* ms;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        retval = -ENOMEM;
+        goto out;
+    }
+    WRITE_ONCE(ms->addr, (unsigned long long) addr);
+    WRITE_ONCE(ms->length, (unsigned long long) size);
+
+    do {
+        retval = sgx_exitless_ocall(OCALL_REMOVE_TRIMMED_PAGES, ms);
+    } while (retval == -EINTR);
+
+out:
+    sgx_reset_ustack(old_ustack);
+    return retval;
+}
+
+int ocall_restrict_page_permissions(void* addr, size_t size, uint64_t restrict_permissions) {
+    int retval = 0;
+    ms_ocall_sgx_restrict_page_perm_t* ms;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        retval = -ENOMEM;
+        goto out;
+    }
+
+    WRITE_ONCE(ms->ms_addr, (unsigned long long)addr);
+    WRITE_ONCE(ms->ms_length, (unsigned long long)size);
+    WRITE_ONCE(ms->ms_permissions, (unsigned long long)restrict_permissions);
+
+    do {
+        retval = sgx_exitless_ocall(OCALL_RESTRICT_PAGE_PERMISSIONS, ms);
+    } while (retval == -EINTR);
+
+out:
+    sgx_reset_ustack(old_ustack);
+    return retval;
+}

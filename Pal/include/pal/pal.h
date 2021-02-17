@@ -125,6 +125,8 @@ struct pal_public_state {
 
     struct pal_cpu_info cpu_info;
     struct pal_topo_info topo_info; /* received from untrusted host, but sanitized */
+
+    bool edmm_enable_heap;
 };
 
 /* We cannot mark this as returning a pointer to `const` object, because LibOS can

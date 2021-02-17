@@ -16,6 +16,7 @@
 #include "cpu.h"
 #include "debug_map.h"
 #include "ecall_types.h"
+#include "gsgx.h"
 #include "linux_utils.h"
 #include "ocall_types.h"
 #include "rpc_queue.h"
@@ -690,48 +691,109 @@ static long sgx_ocall_get_quote(void* pms) {
                           &ms->ms_nonce, &ms->ms_quote, &ms->ms_quote_len);
 }
 
+static long sgx_ocall_trim_epc_pages(void* pms) {
+    extern int g_isgx_device;
+    ms_ocall_sgx_page_modt_t* ms = (ms_ocall_sgx_page_modt_t*)pms;
+    ODEBUG(OCALL_TRIM_EPC_PAGES, ms);
+    struct sgx_enclave_modify_types trim_range;
+    memset(&trim_range, 0, sizeof(trim_range));
+
+    trim_range.offset = ms->addr - g_pal_enclave.baseaddr;
+    trim_range.length = ms->length;
+    trim_range.page_type = ms->page_type;
+
+    long ret = DO_SYSCALL(ioctl, g_isgx_device, SGX_IOC_ENCLAVE_MODIFY_TYPES, &trim_range);
+
+    ms->count = trim_range.count;
+    ms->result = trim_range.result;
+
+    return ret;
+}
+
+static long sgx_ocall_remove_trimmed_pages(void* pms) {
+    extern int g_isgx_device;
+    ms_ocall_sgx_page_remove_t* ms = (ms_ocall_sgx_page_remove_t*)pms;
+    ODEBUG(OCALL_REMOVE_TRIMMED_PAGES, ms);
+
+    struct sgx_enclave_remove_pages remove_range;
+    memset(&remove_range, 0, sizeof(remove_range));
+
+    remove_range.offset = ms->addr - g_pal_enclave.baseaddr;
+    remove_range.length = ms->length;
+
+    long ret = DO_SYSCALL(ioctl, g_isgx_device, SGX_IOC_ENCLAVE_REMOVE_PAGES, &remove_range);
+
+    ms->count = remove_range.count;
+    return ret;
+}
+
+static long sgx_ocall_restrict_page_permissions(void* pms) {
+    extern int g_isgx_device;
+    ms_ocall_sgx_restrict_page_perm_t* ms = (ms_ocall_sgx_restrict_page_perm_t*)pms;
+    ODEBUG(OCALL_RESTRICT_PAGE_PERMISSIONS, ms);
+
+    struct sgx_enclave_restrict_permissions restrict_perms;
+    memset(&restrict_perms, 0, sizeof(restrict_perms));
+
+    restrict_perms.offset = ms->ms_addr - g_pal_enclave.baseaddr;
+    restrict_perms.length = ms->ms_length;
+    restrict_perms.permissions = ms->ms_permissions;
+
+    long ret = DO_SYSCALL(ioctl, g_isgx_device, SGX_IOC_ENCLAVE_RESTRICT_PERMISSIONS,
+                          &restrict_perms);
+
+    ms->ms_count = restrict_perms.count;
+    ms->ms_result = restrict_perms.result;
+
+    return ret;
+}
+
 sgx_ocall_fn_t ocall_table[OCALL_NR] = {
-    [OCALL_EXIT]                     = sgx_ocall_exit,
-    [OCALL_MMAP_UNTRUSTED]           = sgx_ocall_mmap_untrusted,
-    [OCALL_MUNMAP_UNTRUSTED]         = sgx_ocall_munmap_untrusted,
-    [OCALL_CPUID]                    = sgx_ocall_cpuid,
-    [OCALL_OPEN]                     = sgx_ocall_open,
-    [OCALL_CLOSE]                    = sgx_ocall_close,
-    [OCALL_READ]                     = sgx_ocall_read,
-    [OCALL_WRITE]                    = sgx_ocall_write,
-    [OCALL_PREAD]                    = sgx_ocall_pread,
-    [OCALL_PWRITE]                   = sgx_ocall_pwrite,
-    [OCALL_FSTAT]                    = sgx_ocall_fstat,
-    [OCALL_FIONREAD]                 = sgx_ocall_fionread,
-    [OCALL_FSETNONBLOCK]             = sgx_ocall_fsetnonblock,
-    [OCALL_FCHMOD]                   = sgx_ocall_fchmod,
-    [OCALL_FSYNC]                    = sgx_ocall_fsync,
-    [OCALL_FTRUNCATE]                = sgx_ocall_ftruncate,
-    [OCALL_MKDIR]                    = sgx_ocall_mkdir,
-    [OCALL_GETDENTS]                 = sgx_ocall_getdents,
-    [OCALL_RESUME_THREAD]            = sgx_ocall_resume_thread,
-    [OCALL_SCHED_SETAFFINITY]        = sgx_ocall_sched_setaffinity,
-    [OCALL_SCHED_GETAFFINITY]        = sgx_ocall_sched_getaffinity,
-    [OCALL_CLONE_THREAD]             = sgx_ocall_clone_thread,
-    [OCALL_CREATE_PROCESS]           = sgx_ocall_create_process,
-    [OCALL_FUTEX]                    = sgx_ocall_futex,
-    [OCALL_LISTEN]                   = sgx_ocall_listen,
-    [OCALL_ACCEPT]                   = sgx_ocall_accept,
-    [OCALL_CONNECT]                  = sgx_ocall_connect,
-    [OCALL_RECV]                     = sgx_ocall_recv,
-    [OCALL_SEND]                     = sgx_ocall_send,
-    [OCALL_SETSOCKOPT]               = sgx_ocall_setsockopt,
-    [OCALL_SHUTDOWN]                 = sgx_ocall_shutdown,
-    [OCALL_GETTIME]                  = sgx_ocall_gettime,
-    [OCALL_SCHED_YIELD]              = sgx_ocall_sched_yield,
-    [OCALL_POLL]                     = sgx_ocall_poll,
-    [OCALL_RENAME]                   = sgx_ocall_rename,
-    [OCALL_DELETE]                   = sgx_ocall_delete,
-    [OCALL_DEBUG_MAP_ADD]            = sgx_ocall_debug_map_add,
-    [OCALL_DEBUG_MAP_REMOVE]         = sgx_ocall_debug_map_remove,
-    [OCALL_DEBUG_DESCRIBE_LOCATION]  = sgx_ocall_debug_describe_location,
-    [OCALL_EVENTFD]                  = sgx_ocall_eventfd,
-    [OCALL_GET_QUOTE]                = sgx_ocall_get_quote,
+    [OCALL_EXIT]                      = sgx_ocall_exit,
+    [OCALL_MMAP_UNTRUSTED]            = sgx_ocall_mmap_untrusted,
+    [OCALL_MUNMAP_UNTRUSTED]          = sgx_ocall_munmap_untrusted,
+    [OCALL_CPUID]                     = sgx_ocall_cpuid,
+    [OCALL_OPEN]                      = sgx_ocall_open,
+    [OCALL_CLOSE]                     = sgx_ocall_close,
+    [OCALL_READ]                      = sgx_ocall_read,
+    [OCALL_WRITE]                     = sgx_ocall_write,
+    [OCALL_PREAD]                     = sgx_ocall_pread,
+    [OCALL_PWRITE]                    = sgx_ocall_pwrite,
+    [OCALL_FSTAT]                     = sgx_ocall_fstat,
+    [OCALL_FIONREAD]                  = sgx_ocall_fionread,
+    [OCALL_FSETNONBLOCK]              = sgx_ocall_fsetnonblock,
+    [OCALL_FCHMOD]                    = sgx_ocall_fchmod,
+    [OCALL_FSYNC]                     = sgx_ocall_fsync,
+    [OCALL_FTRUNCATE]                 = sgx_ocall_ftruncate,
+    [OCALL_MKDIR]                     = sgx_ocall_mkdir,
+    [OCALL_GETDENTS]                  = sgx_ocall_getdents,
+    [OCALL_RESUME_THREAD]             = sgx_ocall_resume_thread,
+    [OCALL_SCHED_SETAFFINITY]         = sgx_ocall_sched_setaffinity,
+    [OCALL_SCHED_GETAFFINITY]         = sgx_ocall_sched_getaffinity,
+    [OCALL_CLONE_THREAD]              = sgx_ocall_clone_thread,
+    [OCALL_CREATE_PROCESS]            = sgx_ocall_create_process,
+    [OCALL_FUTEX]                     = sgx_ocall_futex,
+    [OCALL_LISTEN]                    = sgx_ocall_listen,
+    [OCALL_ACCEPT]                    = sgx_ocall_accept,
+    [OCALL_CONNECT]                   = sgx_ocall_connect,
+    [OCALL_RECV]                      = sgx_ocall_recv,
+    [OCALL_SEND]                      = sgx_ocall_send,
+    [OCALL_SETSOCKOPT]                = sgx_ocall_setsockopt,
+    [OCALL_SHUTDOWN]                  = sgx_ocall_shutdown,
+    [OCALL_GETTIME]                   = sgx_ocall_gettime,
+    [OCALL_SCHED_YIELD]               = sgx_ocall_sched_yield,
+    [OCALL_POLL]                      = sgx_ocall_poll,
+    [OCALL_RENAME]                    = sgx_ocall_rename,
+    [OCALL_DELETE]                    = sgx_ocall_delete,
+    [OCALL_DEBUG_MAP_ADD]             = sgx_ocall_debug_map_add,
+    [OCALL_DEBUG_MAP_REMOVE]          = sgx_ocall_debug_map_remove,
+    [OCALL_DEBUG_DESCRIBE_LOCATION]   = sgx_ocall_debug_describe_location,
+    [OCALL_EVENTFD]                   = sgx_ocall_eventfd,
+    [OCALL_GET_QUOTE]                 = sgx_ocall_get_quote,
+    [OCALL_TRIM_EPC_PAGES]            = sgx_ocall_trim_epc_pages,
+    [OCALL_REMOVE_TRIMMED_PAGES]      = sgx_ocall_remove_trimmed_pages,
+    [OCALL_RESTRICT_PAGE_PERMISSIONS] = sgx_ocall_restrict_page_permissions,
+
 };
 
 #define EDEBUG(code, ms) \
@@ -850,7 +912,7 @@ static int start_rpc(size_t threads_cnt) {
 
 int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* env,
                         size_t env_size, int parent_stream_fd, sgx_target_info_t* qe_targetinfo,
-                        struct pal_topo_info* topo_info) {
+                        struct pal_topo_info* topo_info, bool edmm_enable_heap) {
     g_rpc_queue = NULL;
 
     if (g_pal_enclave.rpc_thread_num > 0) {
@@ -872,6 +934,7 @@ int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* en
     ms.ms_parent_stream_fd = parent_stream_fd;
     ms.ms_qe_targetinfo    = qe_targetinfo;
     ms.ms_topo_info        = topo_info;
+    ms.ms_edmm_enable_heap = edmm_enable_heap;
     ms.rpc_queue           = g_rpc_queue;
     EDEBUG(ECALL_ENCLAVE_START, &ms);
     return sgx_ecall(ECALL_ENCLAVE_START, &ms);

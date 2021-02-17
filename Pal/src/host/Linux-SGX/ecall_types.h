@@ -28,7 +28,10 @@ typedef struct {
     int                   ms_parent_stream_fd;
     sgx_target_info_t*    ms_qe_targetinfo;
     struct pal_topo_info* ms_topo_info;
-
+    /* We cannot directly read the edmm_enable_heap flag using toml as it calls slab_alloc which
+     * will end up requesting enclave heap. So passing it as an argument but it will better to
+     * encapsulate such fields/flags in a common struct. */
+    bool                  ms_edmm_enable_heap;
     struct rpc_queue*  rpc_queue; /* pointer to RPC queue in untrusted mem */
 } ms_ecall_enclave_start_t;
 

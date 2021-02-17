@@ -415,7 +415,7 @@ __attribute_no_stack_protector
 noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char* uptr_args,
                              size_t args_size, char* uptr_env, size_t env_size,
                              int parent_stream_fd, sgx_target_info_t* uptr_qe_targetinfo,
-                             struct pal_topo_info* uptr_topo_info) {
+                             struct pal_topo_info* uptr_topo_info, bool edmm_enable_heap) {
     /* All our arguments are coming directly from the urts. We are responsible to check them. */
     int ret;
 
@@ -441,6 +441,8 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
 
     g_pal_linuxsgx_state.heap_min = GET_ENCLAVE_TLS(heap_min);
     g_pal_linuxsgx_state.heap_max = GET_ENCLAVE_TLS(heap_max);
+
+    g_pal_public_state.edmm_enable_heap = edmm_enable_heap;
 
     /* Skip URI_PREFIX_FILE. */
     if (libpal_uri_len < URI_PREFIX_FILE_LEN) {
@@ -580,7 +582,10 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
         log_error("Cannot parse 'sgx.preheat_enclave' (the value must be `true` or `false`)");
         ocall_exit(1, /*is_exitgroup=*/true);
     }
-    if (preheat_enclave)
+
+    /* TODO: Skip touching enclave memory if EDMM is enabled. Will address this as part of
+     * Hybrid allocation optimization. */
+    if (!g_pal_public_state.edmm_enable_heap && preheat_enclave)
         do_preheat_enclave();
 
     /* For backward compatibility, `loader.pal_internal_mem_size` does not include
