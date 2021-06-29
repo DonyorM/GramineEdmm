@@ -14,6 +14,9 @@ tests = {
     'devfs': {},
     'device_passthrough': {},
     'double_fork': {},
+    'edmm_heap_mmap': {
+        'link_args': '-lm',
+    },
     'epoll_epollet': {},
     'epoll_test': {},
     'eventfd': {},
