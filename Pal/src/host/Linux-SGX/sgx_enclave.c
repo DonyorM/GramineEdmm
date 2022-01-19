@@ -959,3 +959,8 @@ int ecall_thread_reset(void) {
     EDEBUG(ECALL_THREAD_RESET, NULL);
     return sgx_ecall(ECALL_THREAD_RESET, NULL);
 }
+
+int ecall_allocate_page(uintptr_t addr) {
+    EDEBUG(ECALL_ALLOCATE_PAGE, &addr);
+    return sgx_ecall(ECALL_ALLOCATE_PAGE, &addr);
+}

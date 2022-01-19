@@ -24,6 +24,7 @@
 #include "debug_map.h"
 #include "rpc_queue.h"
 #include "sgx_internal.h"
+#include "sgx_enclave.h"
 #include "sigreturn.h"
 #include "ucontext.h"
 
@@ -97,6 +98,19 @@ static bool interrupted_in_aex_profiling(void) {
     return get_tcb_urts()->is_in_aex_profiling != 0;
 }
 
+static int handle_sigsegv(siginfo_t* info, struct ucontext* uc) {
+    int rc = 0;
+    uintptr_t fault_addr;
+
+    __UNUSED(uc);
+
+    fault_addr = (uintptr_t)info->si_addr;
+
+    ecall_allocate_page(fault_addr);
+
+    return rc;
+}
+
 static void handle_sync_signal(int signum, siginfo_t* info, struct ucontext* uc) {
     enum pal_event event = signal_to_pal_event(signum);
 
@@ -107,16 +121,35 @@ static void handle_sync_signal(int signum, siginfo_t* info, struct ucontext* uc)
         for (size_t i = 0; i < g_rpc_queue->rpc_threads_cnt; i++)
             DO_SYSCALL(tkill, g_rpc_queue->rpc_threads[i], SIGUSR2);
 
+    unsigned long rip = ucontext_get_ip(uc);
+
     if (interrupted_in_enclave(uc)) {
         /* exception happened in app/LibOS/trusted PAL code, handle signal inside enclave */
         get_tcb_urts()->sync_signal_cnt++;
+
+        /* Handle AEXs */
+        switch (signum) {
+            case SIGSEGV:
+                /* TODO: do some sanity checking */
+                if (!handle_sigsegv(info, uc))
+                    return;
+                break;
+            case SIGBUS:
+                if (!handle_sigsegv(info, uc))
+                    return;
+                break;
+            case SIGILL:
+                break;
+            default:
+                log_error("Unhandled AEX signum %d (RIP %p)\n", signum, (void *)rip);
+                break;
+        }
+
         sgx_raise(event);
         return;
     }
 
     /* exception happened in untrusted PAL code (during syscall handling): fatal in Gramine */
-
-    unsigned long rip = ucontext_get_ip(uc);
     char buf[LOCATION_BUF_SIZE];
     pal_describe_location(rip, buf, sizeof(buf));
 

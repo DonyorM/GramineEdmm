@@ -334,7 +334,9 @@ void* get_enclave_pages(void* addr, size_t size, pal_prot_flags_t prot, bool is_
 out:
     /* In order to prevent already accepted pages from being accepted again, we track EPC pages that
      * aren't accepted yet (unallocated heap) and call EACCEPT only on those EPC pages. */
-    if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && ret != NULL) {
+    if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap 
+        && !g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging
+        && ret != NULL) {
         /* Allocate EPC memory */
         for (uint32_t i = 0; i < heap_alloc.range_cnt; i++) {
             void* alloc_addr = heap_alloc.vma_range[i].addr;

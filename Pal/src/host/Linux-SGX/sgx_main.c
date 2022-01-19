@@ -208,6 +208,8 @@ static int initialize_enclave(struct pal_enclave* enclave, const char* manifest_
     char* sig_path = NULL;
     char* token_path = NULL;
     int sigfile_fd = -1, token_fd = -1;
+    bool edmm_demand_paging = enclave->manifest_keys.edmm_demand_paging;
+
     int enclave_mem = -1;
 
     /* this array may overflow the stack, so we allocate it in BSS */
@@ -407,6 +409,21 @@ static int initialize_enclave(struct pal_enclave* enclave, const char* manifest_
         area_num++;
     }
 
+    struct mem_area* aux_stack_area = NULL;
+    if (edmm_demand_paging) {
+        areas[area_num] = (struct mem_area) {
+            .desc = "aux_stack",
+            .skip_eextend = false,
+            .data_src = ZERO,
+            .addr = 0,
+            .size = AUX_STACK_SIZE,
+            .prot = PROT_READ | PROT_WRITE,
+            .type = SGX_PAGE_TYPE_REG
+        };
+        aux_stack_area = &areas[area_num++];
+        log_debug("aux_stack_area: %p\n", aux_stack_area);
+    }
+
     areas[area_num] = (struct mem_area){.desc         = "pal",
                                         .skip_eextend = false,
                                         .data_src     = ELF_FD,
@@ -477,10 +494,17 @@ static int initialize_enclave(struct pal_enclave* enclave, const char* manifest_
                 gs->enclave_size = enclave->size;
                 gs->tcs_offset = tcs_area->addr - enclave->baseaddr + g_page_size * t;
                 gs->initial_stack_addr = stack_areas[t].addr + ENCLAVE_STACK_SIZE;
+                if (aux_stack_area) {
+                    gs->aux_stack_offset = aux_stack_area->addr + AUX_STACK_SIZE
+                        - AUX_STACK_SIZE_PER_THREAD * t;
+                }
                 gs->sig_stack_low = sig_stack_areas[t].addr;
                 gs->sig_stack_high = sig_stack_areas[t].addr + ENCLAVE_SIG_STACK_SIZE;
                 gs->ssa = (void*)ssa_area->addr + enclave->ssa_frame_size * SSA_FRAME_NUM * t;
                 gs->gpr = gs->ssa + enclave->ssa_frame_size - sizeof(sgx_pal_gpr_t);
+                if (edmm_demand_paging) {
+                    gs->gpr1 = gs->ssa + enclave->ssa_frame_size*2 - sizeof(sgx_pal_gpr_t);
+                }
                 gs->manifest_size = manifest_size;
                 gs->heap_min = (void*)enclave_heap_min;
                 gs->heap_max = (void*)pal_area->addr;
@@ -810,6 +834,16 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
     uint64_t preheat_enclave_size = 0;
     ret = toml_sizestring_in(manifest_root, "sgx.preheat_enclave_size", /*defaultval=*/0,
                              &preheat_enclave_size);
+
+    bool edmm_demand_paging = false;
+    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_paging", /*defaultval=*/false,
+                       &edmm_demand_paging);
+    if (ret < 0) {
+        log_error("Cannot parse 'sgx.edmm_demand_paging' (the value must be true or false)\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    enclave_info->manifest_keys.edmm_demand_paging = edmm_demand_paging;
     if (ret < 0) {
         log_error("Cannot parse 'sgx.preheat_enclave_size'");
         ret = -EINVAL;

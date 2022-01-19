@@ -83,10 +83,17 @@ enclave_entry:
     # x86-64 SysV ABI requires RFLAGS.DF = 0 on entry to function call.
     cld
 
+    # Check if it's EPC allocation request
+    # FIXME: %rdi can hold either ecall number or fault number, should find a
+    # to differentiate
+    cmpq $ECALL_ALLOCATE_PAGE, %rdi
+    je .Lecall_alloc_page
+
     # CSSA = 1 -- this is a "stage-1 exception handler" flow
     cmpq $0, %rax
     jne .Lcssa1_exception
 
+.Lecall_alloc_page:
     # RCX contains ECALL return address (filled by EENTER hardware flow)
     movq %rcx, %gs:SGX_ECALL_RETURN_ADDR
 
@@ -107,6 +114,9 @@ enclave_entry:
     cmpq $ECALL_THREAD_RESET, %rdi
     je .Lcssa0_ecall_thread_reset
 
+    cmpq $ECALL_ALLOCATE_PAGE, %rdi
+    je .Lhandle_allocate_page
+
     # Except ECALL_THREAD_RESET, ecalls are only used to start a thread (main or additional
     # threads). We already checked for case of ECALL_THREAD_RESET, so at this point we should only
     # get exactly one ecall per thread.
@@ -117,6 +127,8 @@ enclave_entry:
 .Lcssa0_ecall_enclave_or_thread_start:
     movq $1, %gs:SGX_THREAD_STARTED
 
+    # save CSSA to r8, which is used to judge whether cascading ecall happens
+    movq %rax, %r8
     # calculate enclave base = RBX (trusted) - GS:SGX_TCS_OFFSET
     mov %rbx, %rcx
     subq %gs:SGX_TCS_OFFSET, %rcx
@@ -124,10 +136,12 @@ enclave_entry:
     # switch to enclave stack
     movq %gs:SGX_INITIAL_STACK_ADDR, %rsp
 
+.Lhandle_ecall_aux:
     # clear the rest of register states
     xorq %rax, %rax
     xorq %rbx, %rbx
-    xorq %r8, %r8
+    # r8 holds CSSA value as 5th parameter into handle_ecall()
+    # xorq %r8, %r8
     xorq %r9,  %r9
     xorq %r10, %r10
     xorq %r11, %r11
@@ -153,6 +167,31 @@ enclave_entry:
     # register states need to be carefully checked, so we move handling to handle_ecall() in C code
     callq handle_ecall
 
+    # For returnable ecalls
+    xorq %rdi, %rdi
+    xorq %rsi, %rsi
+
+    movq %gs:SGX_ECALL_USTACK, %rsp
+    movq %gs:SGX_ECALL_RETURN_ADDR, %rbx
+    jmp .Lcssa0_ocall_or_cssa1_exception_eexit
+
+    # handle_ecall will only return when invalid parameters has been passed.
+    FAIL_LOOP
+
+.Lhandle_allocate_page:
+    cmpq $1, %rax
+    je 1f
+    FAIL_LOOP
+1:
+    # Save CSSA to r8
+    movq %rax, %r8
+    subq %gs:SGX_TCS_OFFSET, %rbx
+    movq %rbx, %rcx
+
+    addq %gs:SGX_AUX_STACK_OFFSET, %rbx
+    movq %rbx, %rsp
+
+    jmp .Lhandle_ecall_aux
     # handle_ecall() will only return when invalid parameters has been passed
     FAIL_LOOP
 

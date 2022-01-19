@@ -103,6 +103,9 @@ const struct generated_offset generated_offsets[] = {
     OFFSET(SGX_HEAP_MIN, enclave_tls, heap_min),
     OFFSET(SGX_HEAP_MAX, enclave_tls, heap_max),
     OFFSET(SGX_CLEAR_CHILD_TID, enclave_tls, clear_child_tid),
+    OFFSET(SGX_ECALL_USTACK, enclave_tls, ecall_ustack),
+    OFFSET(SGX_AUX_STACK_OFFSET, enclave_tls, aux_stack_offset),
+    OFFSET(SGX_GPR1, enclave_tls, gpr1),
 
     /* struct pal_tcb_urts aka PAL_TCB_URTS */
     OFFSET(PAL_TCB_URTS_TCS, pal_tcb_urts, tcs),
@@ -172,6 +175,8 @@ const struct generated_offset generated_offsets[] = {
     DEFINE(ECALL_ENCLAVE_START, ECALL_ENCLAVE_START),
     DEFINE(ECALL_THREAD_START, ECALL_THREAD_START),
     DEFINE(ECALL_THREAD_RESET, ECALL_THREAD_RESET),
+    DEFINE(ECALL_PLACEHOLDER, ECALL_PLACEHOLDER),
+    DEFINE(ECALL_ALLOCATE_PAGE, ECALL_ALLOCATE_PAGE),
 
     /* Ocall Index */
     DEFINE(OCALL_EXIT, OCALL_EXIT),

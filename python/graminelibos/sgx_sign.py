@@ -36,6 +36,13 @@ _xdg_config_home = pathlib.Path(os.getenv('XDG_CONFIG_HOME',
     pathlib.Path.home() / '.config'))
 SGX_RSA_KEY_PATH = _xdg_config_home / 'gramine' / 'enclave-key.pem'
 
+DEFAULT_ENCLAVE_SIZE = '256M'
+DEFAULT_THREAD_NUM = 4
+
+AUX_STACK_SIZE = offs.PAGESIZE * 8
+AUX_STACK_MAX_THREAD = 8
+AUX_STACK_SIZE_PER_THREAD = AUX_STACK_SIZE//AUX_STACK_MAX_THREAD
+
 # Utilities
 
 ZERO_PAGE = bytes(offs.PAGESIZE)
@@ -186,6 +193,7 @@ class MemoryArea:
 
 
 def get_memory_areas(attr, libpal):
+    edmm_demand_paging = attr['edmm_demand_paging']
     areas = []
     areas.append(
         MemoryArea('ssa',
@@ -203,7 +211,12 @@ def get_memory_areas(attr, libpal):
         areas.append(MemoryArea('sig_stack', size=offs.ENCLAVE_SIG_STACK_SIZE,
                                 flags=PAGEINFO_R | PAGEINFO_W | PAGEINFO_REG))
 
+    if edmm_demand_paging:
+        areas.append(MemoryArea('aux_stack', size=AUX_STACK_SIZE,
+                                flags=PAGEINFO_R | PAGEINFO_W | PAGEINFO_REG))
+
     areas.append(MemoryArea('pal', elf_filename=libpal, flags=PAGEINFO_REG))
+
     return areas
 
 
@@ -237,6 +250,7 @@ def entry_point(elf_path):
 
 def gen_area_content(attr, areas, enclave_base, enclave_heap_min):
     # pylint: disable=too-many-locals
+    edmm_demand_paging = attr['edmm_demand_paging']
     manifest_area = find_area(areas, 'manifest')
     pal_area = find_area(areas, 'pal')
     ssa_area = find_area(areas, 'ssa')
@@ -244,6 +258,9 @@ def gen_area_content(attr, areas, enclave_base, enclave_heap_min):
     tls_area = find_area(areas, 'tls')
     stacks = find_areas(areas, 'stack')
     sig_stacks = find_areas(areas, 'sig_stack')
+
+    if edmm_demand_paging:
+        aux_stack = find_area(areas, 'aux_stack')
 
     tcs_data = bytearray(tcs_area.size)
 
@@ -291,6 +308,10 @@ def gen_area_content(attr, areas, enclave_base, enclave_heap_min):
         set_tls_field(t, offs.SGX_MANIFEST_SIZE, len(manifest_area.content))
         set_tls_field(t, offs.SGX_HEAP_MIN, enclave_heap_min)
         set_tls_field(t, offs.SGX_HEAP_MAX, enclave_heap_max)
+
+        if edmm_demand_paging:
+            set_tls_field(t, offs.SGX_AUX_STACK_OFFSET, aux_stack.addr + AUX_STACK_SIZE - t*AUX_STACK_SIZE_PER_THREAD)
+            set_tls_field(t, offs.SGX_GPR1, ssa + offs.SSA_FRAME_SIZE*2 - offs.SGX_GPR_SIZE)
 
     tcs_area.content = tcs_data
     tls_area.content = tls_data
@@ -427,6 +448,7 @@ def generate_measurement(enclave_base, attr, areas, verbose=False):
 
     edmm_enable_heap = attr['edmm_enable_heap']
     preheat_enclave_size = attr['preheat_enclave_size']
+    edmm_demand_paging = attr['edmm_demand_paging']
     for area in areas:
         if area.elf_filename is not None:
             with open(area.elf_filename, 'rb') as file:
@@ -499,6 +521,7 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
         'edmm_enable_heap': manifest_sgx['edmm_enable_heap'],
         'preheat_enclave_size': parse_size(manifest_sgx['preheat_enclave_size']),
         'edmm_lazyfree_th': manifest_sgx['edmm_lazyfree_th'],
+        'edmm_demand_paging': manifest_sgx['edmm_demand_paging'],
     }
     attr['flags'], attr['xfrms'], attr['misc_select'] = get_enclave_attributes(manifest_sgx)
 
@@ -523,6 +546,7 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
         print(f'    edmm_enable_heap:          {attr["edmm_enable_heap"]}')
         print(f'    preheat_enclave_size:      {attr["preheat_enclave_size"]:#x}')
         print(f'    edmm_lazyfree_th:          {attr["edmm_lazyfree_th"]}')
+        print(f'    edmm_demand_paging:        {attr["edmm_demand_paging"]}')
 
         if manifest_sgx['remote_attestation']:
             spid = manifest_sgx.get('ra_client_spid', '')

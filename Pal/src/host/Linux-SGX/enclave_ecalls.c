@@ -7,6 +7,7 @@
 #include "pal_linux.h"
 #include "rpc_queue.h"
 #include "sgx_arch.h"
+#include "edmm_pages.h"
 
 #define SGX_CAST(type, item) ((type)(item))
 
@@ -56,7 +57,7 @@ static int verify_and_init_rpc_queue(rpc_queue_t* untrusted_rpc_queue) {
  *      Base address of enclave. Calculated dynamically in enclave_entry.S.
  *      Trusted.
  */
-void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* enclave_base_addr) {
+void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* enclave_base_addr, long cssa) {
     if (ecall_index < 0 || ecall_index >= ECALL_NR)
         return;
 
@@ -66,13 +67,29 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
     }
 
     /* disallow malicious URSP (that points into the enclave) */
-    void* ursp = (void*)GET_ENCLAVE_TLS(gpr)->ursp;
+    // void* ursp = (void*)GET_ENCLAVE_TLS(gpr)->ursp;
+    void* ursp;
+    if (cssa == 0) {
+        ursp = (void*)GET_ENCLAVE_TLS(gpr)->ursp;
+    } else if (cssa == 1) {
+        ursp = (void*)GET_ENCLAVE_TLS(gpr1)->ursp;
+    } else {
+        // no more than 2 SSA frame expected
+        pal_abort();
+    }
     if (g_enclave_base <= ursp && ursp <= g_enclave_top)
         return;
 
     SET_ENCLAVE_TLS(exit_target,     exit_target);
-    SET_ENCLAVE_TLS(ustack,          ursp);
-    SET_ENCLAVE_TLS(ustack_top,      ursp);
+    // SET_ENCLAVE_TLS(ustack,          ursp);
+    // SET_ENCLAVE_TLS(ustack_top,      ursp);
+    if (cssa == 0) {
+        SET_ENCLAVE_TLS(ustack,         ursp);
+        SET_ENCLAVE_TLS(ustack_top,     ursp);
+    } else {
+        // XXX: GPR seems to be wrong here, handle this earlier in asm instead
+        SET_ENCLAVE_TLS(ecall_ustack,   ursp);
+    }
     SET_ENCLAVE_TLS(clear_child_tid, NULL);
     SET_ENCLAVE_TLS(untrusted_area_cache.in_use, 0UL);
 
@@ -124,6 +141,11 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
     } else {
         // ENCLAVE_START already called (maybe successfully, maybe not), so
         // only valid ecall is THREAD_START.
+        if (ecall_index == ECALL_ALLOCATE_PAGE) {
+            get_edmm_page_range(*(void **)ecall_args, PRESET_PAGESIZE);
+            return;
+        }
+
         if (ecall_index != ECALL_THREAD_START) {
             return;
         }

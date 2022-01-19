@@ -30,4 +30,9 @@
 #define MAX_ARGS_SIZE 10000000
 #define MAX_ENV_SIZE  10000000
 
+/* Auxiliary stack for returnable ecalls */
+#define AUX_STACK_SIZE  (PRESET_PAGESIZE * 8)
+#define AUX_MAX_THREAD_NUM  8
+#define AUX_STACK_SIZE_PER_THREAD   (AUX_STACK_SIZE/AUX_MAX_THREAD_NUM)
+
 #endif /* PAL_LINUX_DEFS_H */
