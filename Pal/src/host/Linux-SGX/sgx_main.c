@@ -844,6 +844,20 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
         goto out;
     }
     enclave_info->manifest_keys.edmm_demand_paging = edmm_demand_paging;
+
+    bool edmm_demand_bitmap = false;
+    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_bitmap", /*defaultval=*/false,
+                       &edmm_demand_bitmap);
+    if (ret < 0) {
+        log_error("Cannot parse 'sgx.edmm_demand_bitmap' (the value must be true or false)\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    enclave_info->edmm_demand_bitmap = edmm_demand_bitmap;
+
+    uint64_t preheat_enclave_sz = 0;
+    ret = toml_sizestring_in(manifest_root, "sgx.preheat_enclave_sz", /*defaultval=*/0,
+                             &preheat_enclave_sz);
     if (ret < 0) {
         log_error("Cannot parse 'sgx.preheat_enclave_size'");
         ret = -EINVAL;
@@ -880,6 +894,29 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
         ret = -EINVAL;
         goto out;
     }
+
+    bool edmm_demand_paging = false;
+    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_paging", /*defaultval=*/false,
+        &edmm_demand_paging);
+    if (ret < 0) {
+        log_error("Cannot parse 'sgx.edmm_demand_paging' (the value must be true or false)\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    enclave_info->manifest_keys.edmm_demand_paging = edmm_demand_paging;
+
+    bool edmm_demand_bitmap = false;
+    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_bitmap", /*defaultval=*/false,
+                       &edmm_demand_bitmap);
+    if (ret < 0) {
+        log_error("Cannot parse 'sgx.edmm_demand_bitmap' (the value must be true or false)\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    enclave_info->manifest_keys.edmm_demand_paging = edmm_demand_bitmap;
+
+    if (edmm_demand_bitmap)
+        enclave_info->demand_bitmap = demand_bitmap; // TODO this is clearly a bug
 
     ret = toml_bool_in(manifest_root, "sgx.vtune_profile", /*defaultval=*/false, &g_vtune_profile_enabled);
     if (ret < 0) {
@@ -1127,7 +1164,7 @@ static int load_enclave(struct pal_enclave* enclave, char* args, size_t args_siz
 
     /* start running trusted PAL */
     ecall_enclave_start(enclave->libpal_uri, args, args_size, env, env_size, parent_stream_fd,
-                        &qe_targetinfo, &topo_info, &enclave->manifest_keys);
+                        &qe_targetinfo, &topo_info, enclave->eaug_base, enclave->demand_bitmap, &enclave->manifest_keys);
 
     unmap_tcs();
     DO_SYSCALL(munmap, alt_stack, ALT_STACK_SIZE);

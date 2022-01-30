@@ -54,6 +54,10 @@ struct pal_enclave {
     bool use_epid_attestation; /* Valid only if `remote_attestation_enabled` is true, selects
                                 * EPID/DCAP attestation scheme. */
     unsigned long eaug_base;
+    bool edmm_demand_paging;
+    bool edmm_demand_bitmap;
+    void* demand_bitmap;
+
     char* libpal_uri; /* Path to the PAL binary */
     struct pal_sgx_manifest_config manifest_keys;
 #ifdef DEBUG

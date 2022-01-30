@@ -565,7 +565,10 @@ out:
                 ret = add_to_pending_free_epc(heap_free.vma_range[i].addr, non_overlapping_size,
                                               heap_free.vma_range[i].prot);
             } else {
-                ret = free_edmm_page_range(heap_free.vma_range[i].addr, non_overlapping_size);
+                if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
+                    ret = free_edmm_page_range_sparse(heap_free.vma_range[i].addr, non_overlapping_size);
+                else
+                    ret = free_edmm_page_range(heap_free.vma_range[i].addr, non_overlapping_size);
             }
 
             if (ret < 0) {

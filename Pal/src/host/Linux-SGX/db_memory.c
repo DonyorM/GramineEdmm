@@ -46,7 +46,7 @@ int _DkVirtualMemoryAlloc(void** addr_ptr, uint64_t size, pal_alloc_flags_t allo
     /* Even though SGX2 always zeros the dynamically added pages, there are few pages that aren't
      * dynamically allocated. So for such cases, we still memset to the zero the pages. */
     /* initialize contents of new memory region to zero (LibOS layer expects zeroed-out memory) */
-    memset(mem, 0, size);
+    //memset(mem, 0, size);
 
     *addr_ptr = mem;
 

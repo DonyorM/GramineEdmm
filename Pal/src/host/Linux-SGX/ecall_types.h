@@ -35,6 +35,9 @@ typedef struct {
      * we cannot use TOML APIs as the decision to allocate memory dynamically or static is not
      * known. So, the manifest options are passed to the enclave. */
     struct pal_sgx_manifest_config* ms_manifest_keys;
+    unsigned long         ms_eaug_base;
+    void*                 ms_demand_bitmap;
+
     struct rpc_queue*  rpc_queue; /* pointer to RPC queue in untrusted mem */
 } ms_ecall_enclave_start_t;
 

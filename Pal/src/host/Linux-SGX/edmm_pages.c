@@ -42,6 +42,45 @@ void covert_lazyfree_threshold_to_bytes(void) {
     }
 }
 
+#define PAGE_SHIFT (12)
+
+#define EDMM_BITMAP_OFFSET(x) ((x) >> 6)
+#define EDMM_BITMAP_BITMASK(x) (1UL << ((x)&0x3f))
+
+static inline unsigned long edmm_bitmap_is_set(volatile unsigned long *bitmap, unsigned long addr)
+{
+    unsigned long pg = addr >> PAGE_SHIFT;
+    unsigned long bit_val;
+
+    bit_val = *(bitmap + EDMM_BITMAP_OFFSET(pg));
+
+    return bit_val & EDMM_BITMAP_BITMASK(pg);
+}
+
+static inline void edmm_bitmap_set(unsigned long *bitmap, unsigned long addr)
+{
+    unsigned long pg = addr >> PAGE_SHIFT;
+    unsigned long bit_val;
+
+    bit_val = *(bitmap + EDMM_BITMAP_OFFSET(pg));
+
+    bit_val |= EDMM_BITMAP_BITMASK(pg);
+
+    *(bitmap + EDMM_BITMAP_OFFSET(pg)) = bit_val;
+}
+
+static inline void edmm_bitmap_clear(unsigned long *bitmap, unsigned long addr)
+{
+    unsigned long pg = addr >> PAGE_SHIFT;
+    unsigned long bit_val;
+
+    bit_val = *(unsigned long *)(bitmap + EDMM_BITMAP_OFFSET(pg));
+
+    bit_val &= ~EDMM_BITMAP_BITMASK(pg);
+
+    *(unsigned long *)(bitmap + EDMM_BITMAP_OFFSET(pg)) = bit_val;
+}
+
 /* returns uninitialized edmm heap range */
 static struct edmm_heap_pool* __alloc_heap(void) {
     assert(spinlock_is_locked(&g_heap_vma_lock));
@@ -167,8 +206,12 @@ int add_to_pending_free_epc(void* addr, size_t size, uint32_t prot) {
     while (g_pending_free_size > g_edmm_lazyfree_th_bytes) {
         struct edmm_heap_pool* last_pending_free = LISTP_LAST_ENTRY(&g_edmm_heap_pool_list,
                                                                     struct edmm_heap_pool, list);
+        int ret = 0;
+        if (g_pal_linuxsgx_state.edmm_demand_paging)
+            ret = free_edmm_page_range_sparse(last_pending_free->addr, last_pending_free->size);
+        else
+            ret = free_edmm_page_range(last_pending_free->addr, last_pending_free->size);
 
-        int ret = free_edmm_page_range(last_pending_free->addr, last_pending_free->size);
         if (ret < 0) {
             log_error("%s:Free failed! g_edmm_lazyfree_th_bytes = 0x%lx, g_pending_free_size = 0x%lx,"
                       " last_addr = %p, last_size = 0x%lx, req_addr = %p, req_size = 0x%lx\n",
@@ -368,7 +411,31 @@ int restrict_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t p
 
         start = (void*)((char*)start + g_pal_public_state.alloc_align);
     }
+}
 
+// XXX: for demand paging, the region could be sparsely allocated
+int free_edmm_page_range_sparse(void* start, size_t size) {
+    void *tmp_addr = start;
+    void *end_addr = start + size;
+
+    while (1) {
+        while (tmp_addr < end_addr && !edmm_bitmap_is_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)tmp_addr))
+            tmp_addr += g_page_size;
+
+        if (tmp_addr >= end_addr)
+            break;
+
+        void *free_addr = tmp_addr;
+
+        for (tmp_addr = free_addr + g_page_size;
+                tmp_addr < end_addr && edmm_bitmap_is_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)tmp_addr);
+                tmp_addr += g_page_size) {
+            edmm_bitmap_clear(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)tmp_addr);
+        }
+
+        size_t free_size = tmp_addr - free_addr;
+        free_edmm_page_range(free_addr, free_size);
+    }
     return 0;
 }
 
@@ -438,6 +505,17 @@ int get_edmm_page_range(void* start_addr, size_t size) {
         if (ret) {
             log_error("EDMM accept page failed: %p %d\n", addr, ret);
             return -EFAULT;
+        }
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
+            edmm_bitmap_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)addr);
+
+        /* All new pages will have RW permissions initially, so after EAUG/EACCEPT, extend
+         * permission of a VALID enclave page (if needed). */
+        if (executable) {
+            alignas(64) sgx_arch_sec_info_t secinfo_extend = secinfo;
+
+            secinfo_extend.flags |= SGX_SECINFO_FLAGS_X;
+            sgx_modpe(&secinfo_extend, addr);
         }
     }
 

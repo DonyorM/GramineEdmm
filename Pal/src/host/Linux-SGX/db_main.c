@@ -426,6 +426,8 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
                              size_t args_size, char* uptr_env, size_t env_size,
                              int parent_stream_fd, sgx_target_info_t* uptr_qe_targetinfo,
                              struct pal_topo_info* uptr_topo_info,
+                             unsigned long eaug_base,
+                             void* demand_bitmap,
                              struct pal_sgx_manifest_config* uptr_manifest_keys) {
     /* All our arguments are coming directly from the urts. We are responsible to check them. */
     int ret;

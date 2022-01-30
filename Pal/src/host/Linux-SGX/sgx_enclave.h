@@ -11,6 +11,7 @@
 struct pal_sgx_manifest_config {
     bool edmm_enable_heap;
     bool edmm_demand_paging;
+    bool edmm_demand_bitmap;
     uint64_t preheat_enclave_size;
     uint64_t edmm_lazyfree_th;
     bool edmm_batch_alloc;
@@ -18,7 +19,7 @@ struct pal_sgx_manifest_config {
 
 int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* env, size_t env_size,
                         int parent_stream_fd, sgx_target_info_t* qe_targetinfo,
-                        struct pal_topo_info* topo_info,
+                        struct pal_topo_info* topo_info, unsigned long eaug_base, void* demand_bitmap,
                         struct pal_sgx_manifest_config* manifest_keys);
 
 int ecall_thread_start(void);

@@ -170,6 +170,15 @@ int create_enclave(sgx_arch_secs_t* secs, sgx_arch_token_t* token) {
 
     assert(addr == request_mmap_addr);
 
+    if (g_pal_enclave.edmm_demand_paging) {
+        addr = DO_SYSCALL(mmap, NULL, 1024*1024,
+                          PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS,
+                          -1, 0);
+        g_pal_enclave.demand_bitmap = (void *)addr;
+        memset((void *)addr, 0, 1024*1024);
+        log_error("Demand paging bitmap mapped at 0x%lx", (unsigned long)addr);
+    }
+
     struct sgx_enclave_create param = {
         .src = (uint64_t)secs,
     };
