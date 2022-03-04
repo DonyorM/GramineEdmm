@@ -143,6 +143,16 @@ size_t find_preallocated_heap_nonoverlap(void* addr, size_t size) {
     return non_overlapping_size;
 }
 
+static void __attribute_unused dump_heap_pool_list(void)
+{
+    struct edmm_heap_pool* temp;
+
+    log_debug("Dumping heap pool list:");
+    LISTP_FOR_EACH_ENTRY(temp, &g_edmm_heap_pool_list, list) {
+        log_debug("\t[%p, %p)", temp->addr, temp->addr+temp->size);
+    }
+}
+
 /* This function adds free EPC page requests to a global list and frees the EPC pages in a lazy
  * manner once the amount of free EPC pages exceeds a certain threshold. Returns 0 on success and
  * negative unix error code on failure. */
@@ -427,6 +437,7 @@ int free_edmm_page_range_sparse(void* start, size_t size) {
 
         void *free_addr = tmp_addr;
 
+        edmm_bitmap_clear(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)tmp_addr);
         for (tmp_addr = free_addr + g_page_size;
                 tmp_addr < end_addr && edmm_bitmap_is_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)tmp_addr);
                 tmp_addr += g_page_size) {
