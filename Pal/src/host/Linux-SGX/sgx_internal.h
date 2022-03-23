@@ -12,6 +12,7 @@
 
 #include "api.h"
 #include "pal_linux.h"
+#include "sgx_enclave.h"
 #include "sgx_syscall.h"
 #include "toml.h"
 
@@ -48,13 +49,12 @@ struct pal_enclave {
     unsigned long thread_num;
     unsigned long rpc_thread_num;
     unsigned long ssa_frame_size;
-    bool edmm_enable_heap;
     bool nonpie_binary;
     bool remote_attestation_enabled;
     bool use_epid_attestation; /* Valid only if `remote_attestation_enabled` is true, selects
                                 * EPID/DCAP attestation scheme. */
     char* libpal_uri; /* Path to the PAL binary */
-
+    struct pal_sgx_manifest_config manifest_keys;
 #ifdef DEBUG
     /* profiling */
     bool profile_enable;

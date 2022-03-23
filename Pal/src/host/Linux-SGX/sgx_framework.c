@@ -142,7 +142,7 @@ int create_enclave(sgx_arch_secs_t* secs, sgx_arch_token_t* token) {
 #endif
 
     uint64_t addr;
-    if (g_pal_enclave.edmm_enable_heap) {
+    if (g_pal_enclave.manifest_keys.edmm_enable_heap) {
         /* currently edmm support is available with legacy intel driver */
         addr = DO_SYSCALL(mmap, request_mmap_addr, request_mmap_size,
                           PROT_READ | PROT_WRITE | PROT_EXEC,

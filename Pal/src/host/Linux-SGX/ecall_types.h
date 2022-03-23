@@ -8,6 +8,7 @@
 
 #include "pal.h"
 #include "sgx_arch.h"
+#include "sgx_enclave.h"
 
 enum {
     ECALL_ENCLAVE_START = 0,
@@ -28,10 +29,10 @@ typedef struct {
     int                   ms_parent_stream_fd;
     sgx_target_info_t*    ms_qe_targetinfo;
     struct pal_topo_info* ms_topo_info;
-    /* We cannot directly read the edmm_enable_heap flag using toml as it calls slab_alloc which
-     * will end up requesting enclave heap. So passing it as an argument but it will better to
-     * encapsulate such fields/flags in a common struct. */
-    bool                  ms_edmm_enable_heap;
+    /* Using TOML to extract manifest option ends up using heap (slab_alloc). In case of EDMM,
+     * we cannot use TOML APIs as the decision to allocate memory dynamically or static is not
+     * known. So, the manifest options are passed to the enclave. */
+    struct pal_sgx_manifest_config* ms_manifest_keys;
     struct rpc_queue*  rpc_queue; /* pointer to RPC queue in untrusted mem */
 } ms_ecall_enclave_start_t;
 

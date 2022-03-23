@@ -28,6 +28,7 @@
 #include "sgx_api.h"
 #include "sgx_arch.h"
 #include "sgx_attest.h"
+#include "sgx_enclave.h"
 #include "sgx_syscall.h"
 #include "sgx_tls.h"
 
@@ -41,6 +42,8 @@ extern struct pal_linuxsgx_state {
     /* remaining heap usable by application */
     void* heap_min;
     void* heap_max;
+
+    struct pal_sgx_manifest_config manifest_keys;
 } g_pal_linuxsgx_state;
 
 
@@ -57,7 +60,8 @@ extern size_t g_pal_internal_mem_size;
 noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char* uptr_args,
                              size_t args_size, char* uptr_env, size_t env_size,
                              int parent_stream_fd, sgx_target_info_t* uptr_qe_targetinfo,
-                             struct pal_topo_info* uptr_topo_info, bool uptr_edmm_enable_heap);
+                             struct pal_topo_info* uptr_topo_info,
+                             struct pal_sgx_manifest_config* uptr_manifest_keys);
 void pal_start_thread(void);
 
 extern char __text_start, __text_end, __data_start, __data_end;

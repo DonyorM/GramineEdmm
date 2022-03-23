@@ -99,6 +99,12 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         if (!topo_info || !sgx_is_completely_outside_enclave(topo_info, sizeof(*topo_info)))
             return;
 
+        struct pal_sgx_manifest_config* manifest_keys = READ_ONCE(ms->ms_manifest_keys);
+        if (!manifest_keys ||
+                !sgx_is_completely_outside_enclave(manifest_keys, sizeof(*manifest_keys))) {
+            return;
+        }
+
         /* xsave size must be initialized early, from a trusted source (EREPORT result) */
         // TODO: This eats 1KB of a stack frame which lives for the whole lifespan of this enclave.
         //       We should move it somewhere else and deallocate right after use.
@@ -114,8 +120,7 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         pal_linux_main(READ_ONCE(ms->ms_libpal_uri), READ_ONCE(ms->ms_libpal_uri_len),
                        READ_ONCE(ms->ms_args), READ_ONCE(ms->ms_args_size), READ_ONCE(ms->ms_env),
                        READ_ONCE(ms->ms_env_size), READ_ONCE(ms->ms_parent_stream_fd),
-                       READ_ONCE(ms->ms_qe_targetinfo), topo_info,
-                       READ_ONCE(ms->ms_edmm_enable_heap));
+                       READ_ONCE(ms->ms_qe_targetinfo), topo_info, manifest_keys);
     } else {
         // ENCLAVE_START already called (maybe successfully, maybe not), so
         // only valid ecall is THREAD_START.

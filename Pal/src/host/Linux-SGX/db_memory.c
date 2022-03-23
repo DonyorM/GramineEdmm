@@ -88,7 +88,7 @@ int _DkVirtualMemoryProtect(void* addr, uint64_t size, pal_prot_flags_t prot) {
     }
 #endif
 
-    if (g_pal_public_state.edmm_enable_heap) {
+    if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap) {
         ret = update_enclave_page_permissions(addr, size, prot);
     } else {
         static struct atomic_int at_cnt = {.counter = 0};

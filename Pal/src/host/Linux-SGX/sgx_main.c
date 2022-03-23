@@ -508,18 +508,41 @@ static int initialize_enclave(struct pal_enclave* enclave, const char* manifest_
         }
 
         /* skip adding free (heap) pages to the enclave if EDMM is enabled */
-        if (enclave->edmm_enable_heap && !strcmp(areas[i].desc, "free")) {
+        if (enclave->manifest_keys.edmm_enable_heap && !strcmp(areas[i].desc, "free")) {
             char p[4] = "---";
             prot_flags_to_permissions_str(p, areas[i].prot);
-            log_debug("SKIP adding pages to enclave: %p-%p [%s:%s] (%s)%s\n",
-                            (void *)areas[i].addr,
-                            (void *)areas[i].addr + areas[i].size,
-                            (areas[i].type == SGX_PAGE_TYPE_TCS) ? "TCS" : "REG",
-                            p, areas[i].desc,  areas[i].skip_eextend ? "" : " measured");
+            uint64_t preheat_enclave_size = enclave->manifest_keys.preheat_enclave_size;
+
+            if (preheat_enclave_size == 0 ) {
+                log_debug("SKIP adding pages to enclave: %p-%p [%s:%s] (%s)%s\n",
+                          (void *)areas[i].addr, (void *)areas[i].addr + areas[i].size,
+                          (areas[i].type == SGX_PAGE_TYPE_TCS) ? "TCS" : "REG",
+                          p, areas[i].desc,  areas[i].skip_eextend ? "" : " measured");
+            } else if (preheat_enclave_size <= areas[i].size) {
+                //TODO: REMOVE THIS DEBUG LOG
+                log_debug("Original heap addr = %p, size = 0x%lx, preheat_enclave_size = 0x%lx\n",
+                          (void*)areas[i].addr, areas[i].size, preheat_enclave_size);
+                /* Add preheat_size of heap to the enclave */
+                ret = add_pages_to_enclave(&enclave_secs,
+                                           (void*)(areas[i].addr + areas[i].size - preheat_enclave_size),
+                                           data, preheat_enclave_size,
+                                           areas[i].type, areas[i].prot, areas[i].skip_eextend,
+                                           areas[i].desc);
+                log_debug("SKIP adding pages to enclave: %p-%p [%s:%s] (%s)%s\n",
+                          (void *)areas[i].addr,
+                          (void*)(areas[i].addr + areas[i].size - preheat_enclave_size),
+                          (areas[i].type == SGX_PAGE_TYPE_TCS) ? "TCS" : "REG",
+                          p, areas[i].desc,  areas[i].skip_eextend ? "" : " measured");
+            } else {
+                log_error("Adding pages (%s) to enclave failed! preheat_size should be less \
+                           than total heap size %ld\n", areas[i].desc, areas[i].size);
+                ret = -EINVAL;
+                goto out;
+            }
         } else {
             ret = add_pages_to_enclave(&enclave_secs, (void*)areas[i].addr, data, areas[i].size,
-                                       areas[i].type, areas[i].prot, areas[i].skip_eextend,
-                                       areas[i].desc);
+                                    areas[i].type, areas[i].prot, areas[i].skip_eextend,
+                                    areas[i].desc);
         }
 
         if (data)
@@ -782,7 +805,23 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
         ret = -EINVAL;
         goto out;
     }
-    enclave_info->edmm_enable_heap = edmm_enable_heap;
+    enclave_info->manifest_keys.edmm_enable_heap = edmm_enable_heap;
+
+    uint64_t preheat_enclave_size = 0;
+    ret = toml_sizestring_in(manifest_root, "sgx.preheat_enclave_size", /*defaultval=*/0,
+                             &preheat_enclave_size);
+    if (ret < 0) {
+        log_error("Cannot parse 'sgx.preheat_enclave_size'");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    if (!IS_ALIGNED(preheat_enclave_size, g_page_size)) {
+        log_error("preheat_enclave_size should be page aligned: %ld", g_page_size);
+        ret = -EINVAL;
+        goto out;
+    }
+    enclave_info->manifest_keys.preheat_enclave_size = preheat_enclave_size;
 
     ret = toml_string_in(manifest_root, "sgx.profile.enable", &profile_str);
     if (ret < 0) {
@@ -1040,7 +1079,7 @@ static int load_enclave(struct pal_enclave* enclave, char* args, size_t args_siz
 
     /* start running trusted PAL */
     ecall_enclave_start(enclave->libpal_uri, args, args_size, env, env_size, parent_stream_fd,
-                        &qe_targetinfo, &topo_info, enclave->edmm_enable_heap);
+                        &qe_targetinfo, &topo_info, &enclave->manifest_keys);
 
     unmap_tcs();
     DO_SYSCALL(munmap, alt_stack, ALT_STACK_SIZE);

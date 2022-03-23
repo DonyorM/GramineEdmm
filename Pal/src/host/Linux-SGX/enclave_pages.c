@@ -86,6 +86,30 @@ static void __free_vma(struct heap_vma* vma) {
     g_heap_vma_num--;
 }
 
+/* Returns size that is non overlapping with the pre-allocated heap when preheat option is turned on.
+ * 0 means entire request overlaps with the pre-allocated region. */
+static size_t find_preallocated_heap_nonoverlap(void* addr, size_t size) {
+    size_t non_overlapping_size = size;
+
+    uint64_t preheat_enclave_size = g_pal_linuxsgx_state.manifest_keys.preheat_enclave_size;
+    uint8_t* heap_max = (uint8_t*)g_pal_linuxsgx_state.heap_max;
+
+    if (preheat_enclave_size > 0) {
+        if ((uint8_t*)addr >= heap_max - preheat_enclave_size) {
+            /* Full overlap: Entire request lies in the pre-allocated region */
+            non_overlapping_size = 0;
+        } else if ((uint8_t*)addr + size > heap_max - preheat_enclave_size) {
+            /* Partial overlap: Update size to skip the overlapped region. */
+            non_overlapping_size = heap_max - preheat_enclave_size - (uint8_t*)addr;
+        } else {
+            /* No overlap */
+            non_overlapping_size = size;
+        }
+    }
+
+    return non_overlapping_size;
+}
+
 static void edmm_update_heap_request(void* addr, size_t size, pal_prot_flags_t prot,
                                 struct edmm_heap_request* heap_req) {
     assert(heap_req->range_cnt < EDMM_HEAP_RANGE_CNT);
@@ -158,6 +182,15 @@ static int free_edmm_page_range(void* start, size_t size) {
     void* addr = ALLOC_ALIGN_DOWN_PTR(start);
     void* end = (void*)((char*)addr + size);
     int ret = 0;
+
+    size_t non_overlapping_size = find_preallocated_heap_nonoverlap(addr, size);
+
+    /* Entire request overlaps with preallocated heap, so simply return. */
+    if (non_overlapping_size == 0) {
+        return 0;
+    } else {
+        size = non_overlapping_size;
+    }
 
     enum sgx_page_type type = SGX_PAGE_TYPE_TRIM;
     ret = ocall_trim_epc_pages(addr, size, type);
@@ -279,7 +312,7 @@ static void* __create_vma_and_merge(void* addr, size_t size, pal_prot_flags_t pr
     while (vma_above && vma_above->bottom <= vma->top &&
            vma_above->is_pal_internal == vma->is_pal_internal) {
 
-        if (g_pal_public_state.edmm_enable_heap &&
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap &&
             vma_above->top > vma->top && vma_above->prot != vma->prot) {
             size_t perm_size = vma->top - vma_above->bottom;
             if (perm_size)
@@ -296,14 +329,15 @@ static void* __create_vma_and_merge(void* addr, size_t size, pal_prot_flags_t pr
         struct heap_vma* vma_above_above = LISTP_PREV_ENTRY(vma_above, &g_heap_vma_list, list);
 
         /* Update edmm heap request */
-        if (g_pal_public_state.edmm_enable_heap && vma_above->prot != prot) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && vma_above->prot != prot) {
             size_t size = vma_above->top - vma_above->bottom;
             edmm_update_heap_request(vma_above->bottom, size, vma_above->prot, heap_perm);
         }
 
 
         /* Track unallocated memory regions between VMAs while merging `vma_above`. */
-        if (g_pal_public_state.edmm_enable_heap && vma_above->bottom > unallocated_start_addr) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap &&
+            vma_above->bottom > unallocated_start_addr) {
             size_t alloc_size = vma_above->bottom - unallocated_start_addr;
             /* This is unallocated memory so set current prot permission as R | W as this is the
              * default permission set by the driver after a page is EAUGed. */
@@ -317,7 +351,7 @@ static void* __create_vma_and_merge(void* addr, size_t size, pal_prot_flags_t pr
 
         /* Store vma_above->top to check for any free region between vma_above->top and
         * vma_above_above->bottom. */
-        if (g_pal_public_state.edmm_enable_heap)
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap)
             unallocated_start_addr = vma_above->top;
 
         __free_vma(vma_above);
@@ -328,7 +362,7 @@ static void* __create_vma_and_merge(void* addr, size_t size, pal_prot_flags_t pr
     while (vma_below && vma_below->top >= vma->bottom &&
            vma_below->is_pal_internal == vma->is_pal_internal) {
 
-        if (g_pal_public_state.edmm_enable_heap && vma_below->prot != vma->prot) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && vma_below->prot != vma->prot) {
             if (vma_below->top > vma->top) {
                 /* create VMA [vma->bottom, addr); this may leave VMA [addr + size, vma->top), see below */
                 struct heap_vma* new = __alloc_vma();
@@ -364,7 +398,7 @@ static void* __create_vma_and_merge(void* addr, size_t size, pal_prot_flags_t pr
         struct heap_vma* vma_below_below = LISTP_NEXT_ENTRY(vma_below, &g_heap_vma_list, list);
 
         /* Update edmm heap request */
-        if (g_pal_public_state.edmm_enable_heap && vma_below->prot != prot) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && vma_below->prot != prot) {
             size_t size = vma_below->top - vma_below->bottom;
             edmm_update_heap_request(vma_below->bottom, size, vma_below->prot, heap_perm);
         }
@@ -389,7 +423,8 @@ static void* __create_vma_and_merge(void* addr, size_t size, pal_prot_flags_t pr
     size_t allocated = vma->top - vma->bottom - freed;
 
     /* No unallocated memory regions between VMAs found */
-    if (g_pal_public_state.edmm_enable_heap && heap_alloc->range_cnt == 0 && allocated > 0) {
+    if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap &&
+        heap_alloc->range_cnt == 0 && allocated > 0) {
         edmm_update_heap_request(unallocated_start_addr, allocated, PAL_PROT_READ | PAL_PROT_WRITE,
                                  heap_alloc);
     }
@@ -456,24 +491,36 @@ void* get_enclave_pages(void* addr, size_t size, pal_prot_flags_t prot, bool is_
 out:
     /* In order to prevent already accepted pages from being accepted again, we track EPC pages that
      * aren't accepted yet (unallocated heap) and call EACCEPT only on those EPC pages. */
-    if (g_pal_public_state.edmm_enable_heap && ret != NULL) {
+    if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && ret != NULL) {
         /* Allocate EPC memory */
         for (uint32_t i = 0; i < heap_alloc.range_cnt; i++) {
             alloc_count++;
             void* alloc_addr = heap_alloc.vma_range[i].addr;
             size_t alloc_size = heap_alloc.vma_range[i].size;
+            uint32_t vma_prot = heap_alloc.vma_range[i].prot;
 
-            int retval = get_edmm_page_range(alloc_addr, alloc_size);
+            /* check if the requested region falls within pre-allocated region */
+            size_t non_overlapping_size = find_preallocated_heap_nonoverlap(alloc_addr, alloc_size);
+            log_debug("%s: preallocated heap addr = %p, org_size = %lx, updated_size=%lx\n", __func__,
+                       alloc_addr, alloc_size, non_overlapping_size);
+            /* Entire request overlaps with preallocated heap, so update the permissions */
+            if (non_overlapping_size == 0) {
+                /* pre-allocated heap regions have `R | W | X` */
+                //vma_prot = vma_prot | PAL_PROT_EXEC;
+                continue;
+            }
+
+            int retval = get_edmm_page_range(alloc_addr, non_overlapping_size);
             if (retval < 0) {
                 ret = NULL;
                 goto release_lock;
             }
+            alloc_size = non_overlapping_size;
 
             /* Due SGX2 architectural requirement the driver sets default page permission to R | W.
              * So, if the requested permissions is  R | W then we  skip it. */
-            if (req_prot != (SGX_SECINFO_FLAGS_R | SGX_SECINFO_FLAGS_W)) {
-                edmm_update_heap_request(alloc_addr, alloc_size, heap_alloc.vma_range[i].prot,
-                                         &heap_perm);
+            if (req_prot != vma_prot) {
+                edmm_update_heap_request(alloc_addr, alloc_size, vma_prot, &heap_perm);
             }
         }
 
@@ -579,7 +626,7 @@ int free_enclave_pages(void* addr, size_t size) {
         void* free_heap_bottom = MAX(vma->bottom, addr);
         size_t range = free_heap_top - free_heap_bottom;
         freed += range;
-        if (g_pal_public_state.edmm_enable_heap) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap) {
             /* if range is contiguous with previous entry, update addr and size accordingly;
              * this case may be rare but the below optimization still saves us 2 OCALLs and 2
              * IOCTLs, so should be worth it */
@@ -628,7 +675,7 @@ int free_enclave_pages(void* addr, size_t size) {
 #endif
 
 out:
-    if (ret >=0 && g_pal_public_state.edmm_enable_heap) {
+    if (ret >=0 && g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap) {
         for (uint32_t i = 0; i < heap_free.range_cnt; i++) {
             ret = free_edmm_page_range(heap_free.vma_range[i].addr, heap_free.vma_range[i].size);
             if (ret < 0) {
@@ -638,7 +685,6 @@ out:
         }
     }
     spinlock_unlock(&g_heap_vma_lock);
-
     return ret;
 }
 

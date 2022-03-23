@@ -317,7 +317,7 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
          * requested page permissions without write access.In such cases, relax the permission to
          * have write permission and then revert it to original request. */
         pal_prot_flags_t req_prot;
-        if (g_pal_public_state.edmm_enable_heap) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap) {
             req_prot = (prot & PAL_PROT_WRITE) ? prot : prot | PAL_PROT_READ | PAL_PROT_WRITE;
             ret = update_enclave_page_permissions(mem, size, req_prot);
             if (ret < 0) {
@@ -343,7 +343,7 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
         }
 
         /* If permissions were modified, revert it to original */
-        if (g_pal_public_state.edmm_enable_heap && (prot != req_prot)) {
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && (prot != req_prot)) {
             ret = update_enclave_page_permissions(mem, size, prot);
             if (ret < 0) {
                 log_error("file_map - updating enclave page permissions returned %d", ret);

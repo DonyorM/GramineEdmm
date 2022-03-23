@@ -40,6 +40,9 @@ SGX_RSA_KEY_PATH = _xdg_config_home / 'gramine' / 'enclave-key.pem'
 
 ZERO_PAGE = bytes(offs.PAGESIZE)
 
+def is_aligned(val, alignment):
+    return (val % alignment == 0)
+
 
 def roundup(addr):
     remaining = addr % offs.PAGESIZE
@@ -423,6 +426,7 @@ def generate_measurement(enclave_base, attr, areas, verbose=False):
         print('Memory:')
 
     edmm_enable_heap = attr['edmm_enable_heap']
+    preheat_enclave_size = attr['preheat_enclave_size']
     for area in areas:
         if area.elf_filename is not None:
             with open(area.elf_filename, 'rb') as file:
@@ -450,9 +454,22 @@ def generate_measurement(enclave_base, attr, areas, verbose=False):
                     load_file(mrenclave, file, offset, baseaddr_ + addr, filesize, memsize,
                               desc, flags)
         else:
-            # Skip EADDing of heap ("free") pages when EDMM is enabled.
+            # Hybrid approach: To reduce the enclave exits, pre-allocate minimal heap from top
+            # as required by application and allocate the remaining dynamically using EDMM.
             if edmm_enable_heap == 1 and area.desc == "free":
-                continue
+                if preheat_enclave_size == 0:
+                    print(f'    Skip EAdding {area.addr:016x}-{area.addr + area.size:016x} ({area.desc})')
+                    #print_area(area.addr, area.size, area.flags, area.desc, area.measure)
+                    continue
+                else:
+                    if preheat_enclave_size > area.size:
+                        raise Exception("preheat_enclave_size must be less than total heap "
+                                        "size: 0x{0:x}".format(area.size))
+
+                    print(f'    Skip EAdding {area.addr:016x}-{area.addr + area.size - preheat_enclave_size:016x} ({area.desc})')
+                    area.addr = area.addr + area.size - preheat_enclave_size
+                    area.size = preheat_enclave_size
+
             for addr in range(area.addr, area.addr + area.size, offs.PAGESIZE):
                 data = ZERO_PAGE
                 if area.content is not None:
@@ -480,19 +497,26 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
         'isv_prod_id': manifest_sgx['isvprodid'],
         'isv_svn': manifest_sgx['isvsvn'],
         'edmm_enable_heap': manifest_sgx['edmm_enable_heap'],
+        'preheat_enclave_size': parse_size(manifest_sgx['preheat_enclave_size']),
     }
     attr['flags'], attr['xfrms'], attr['misc_select'] = get_enclave_attributes(manifest_sgx)
 
+    if attr['preheat_enclave_size'] < 0 or  \
+       is_aligned(attr['preheat_enclave_size'], offs.PAGESIZE) == 0:
+        raise Exception("preheat_enclave_size: {0} should be greater than or equal to 0!"
+                        .format(attr['preheat_enclave_size']))
+
     if verbose:
         print('Attributes:')
-        print(f'    size:             {attr["enclave_size"]:#x}')
-        print(f'    thread_num:       {attr["thread_num"]}')
-        print(f'    isv_prod_id:      {attr["isv_prod_id"]}')
-        print(f'    isv_svn:          {attr["isv_svn"]}')
-        print(f'    attr.flags:       {attr["flags"]:#x}')
-        print(f'    attr.xfrm:        {attr["xfrms"]:#x}')
-        print(f'    misc_select:      {attr["misc_select"]:#x}')
-        print(f'    edmm_enable_heap: {attr["edmm_enable_heap"]}')
+        print(f'    size:                      {attr["enclave_size"]:#x}')
+        print(f'    thread_num:                {attr["thread_num"]}')
+        print(f'    isv_prod_id:               {attr["isv_prod_id"]}')
+        print(f'    isv_svn:                   {attr["isv_svn"]}')
+        print(f'    attr.flags:                {attr["flags"]:#x}')
+        print(f'    attr.xfrm:                 {attr["xfrms"]:#x}')
+        print(f'    misc_select:               {attr["misc_select"]:#x}')
+        print(f'    edmm_enable_heap:          {attr["edmm_enable_heap"]}')
+        print(f'    preheat_enclave_size:      {attr["preheat_enclave_size"]:#x}')
 
         if manifest_sgx['remote_attestation']:
             spid = manifest_sgx.get('ra_client_spid', '')

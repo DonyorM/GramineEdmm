@@ -100,6 +100,8 @@ class Manifest:
         sgx.setdefault('nonpie_binary', False)
         sgx.setdefault('enable_stats', False)
         sgx.setdefault('edmm_enable_heap', False)
+        sgx.setdefault('preheat_enclave_size', '0')
+
 
         if not isinstance(sgx['trusted_files'], list):
             raise ValueError("Unsupported trusted files syntax, more info: " +
