@@ -14,6 +14,7 @@
 #include <stdnoreturn.h>
 
 #include "api.h"
+#include "edmm_pages.h"
 #include "enclave_tf.h"
 #include "init.h"
 #include "pal.h"
@@ -480,7 +481,14 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
             ocall_exit(1, /*is_exitgroup=*/true);
         }
     }
+
+    if (manifest_keys.edmm_enable_heap && manifest_keys.edmm_lazyfree_th > 100) {
+        log_error("edmm_lazyfree_th is a percentage and takes values between 0 and 100!");
+        ocall_exit(1, /*is_exitgroup=*/true);
+    }
+
     g_pal_linuxsgx_state.manifest_keys = manifest_keys;
+    covert_lazyfree_threshold_to_bytes();
 
     /* Skip URI_PREFIX_FILE. */
     if (libpal_uri_len < URI_PREFIX_FILE_LEN) {

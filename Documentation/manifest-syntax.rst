@@ -556,6 +556,19 @@ size precisely for each workload. EDMM does help to reduce the loading time of
 a large enclave application but can impact the runtime as there is a penalty
 for additional asynchronous enclave exits (AEXs) caused by #PFs.
 
+EDMM Lazy Free optimization (Experimental)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+::
+
+    sgx.edmm_lazyfree_th = [NUM]
+    (Default: 0)
+
+This syntax specifies the **percentage** of total heap that can be freed in a
+lazy manner. Until this threshold is met, Gramine doesn't release any
+dynamically allocated memory. This optimization helps reduce the expensive
+enclave entries/exits associated with dynamic freeing of EPC pages.
+
 Optional CPU features (AVX, AVX512, MPX, PKRU, AMX)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

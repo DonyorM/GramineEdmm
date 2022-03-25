@@ -801,7 +801,7 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
     ret = toml_bool_in(manifest_root, "sgx.edmm_enable_heap", /*defaultval=*/false,
                        &edmm_enable_heap);
     if (ret < 0 ) {
-        log_error("Cannot parse 'sgx.edmm_enable_heap' (the value must be 0 or 1)\n");
+        log_error("Cannot parse 'sgx.edmm_enable_heap' (the value must be 0 or 1)");
         ret = -EINVAL;
         goto out;
     }
@@ -822,6 +822,22 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
         goto out;
     }
     enclave_info->manifest_keys.preheat_enclave_size = preheat_enclave_size;
+
+    int64_t edmm_lazyfree_th = 0;
+    ret = toml_int_in(manifest_root, "sgx.edmm_lazyfree_th", /*defaultval=*/0, &edmm_lazyfree_th);
+    if (ret < 0){
+        log_error("Cannot parse 'sgx.edmm_lazyfree_th'");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    if ((edmm_lazyfree_th < 0) || (edmm_lazyfree_th > 100)) {
+        log_error("'sgx.edmm_lazyfree_th' is a percentage and takes values between 0 and 100!");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    enclave_info->manifest_keys.edmm_lazyfree_th = edmm_lazyfree_th;
 
     ret = toml_string_in(manifest_root, "sgx.profile.enable", &profile_str);
     if (ret < 0) {

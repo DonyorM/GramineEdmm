@@ -101,6 +101,7 @@ class Manifest:
         sgx.setdefault('enable_stats', False)
         sgx.setdefault('edmm_enable_heap', False)
         sgx.setdefault('preheat_enclave_size', '0')
+        sgx.setdefault('edmm_lazyfree_th', 0)
 
 
         if not isinstance(sgx['trusted_files'], list):

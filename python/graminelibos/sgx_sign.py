@@ -498,6 +498,7 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
         'isv_svn': manifest_sgx['isvsvn'],
         'edmm_enable_heap': manifest_sgx['edmm_enable_heap'],
         'preheat_enclave_size': parse_size(manifest_sgx['preheat_enclave_size']),
+        'edmm_lazyfree_th': manifest_sgx['edmm_lazyfree_th'],
     }
     attr['flags'], attr['xfrms'], attr['misc_select'] = get_enclave_attributes(manifest_sgx)
 
@@ -505,6 +506,10 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
        is_aligned(attr['preheat_enclave_size'], offs.PAGESIZE) == 0:
         raise Exception("preheat_enclave_size: {0} should be greater than or equal to 0!"
                         .format(attr['preheat_enclave_size']))
+
+    if attr['edmm_lazyfree_th'] < 0 or attr['edmm_lazyfree_th'] > 100:
+        raise Exception("edmm_lazyfree_th: {0} is a percent value and so ranges between 0 and 100!"
+                        .format(attr['edmm_lazyfree_th']))
 
     if verbose:
         print('Attributes:')
@@ -517,6 +522,7 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
         print(f'    misc_select:               {attr["misc_select"]:#x}')
         print(f'    edmm_enable_heap:          {attr["edmm_enable_heap"]}')
         print(f'    preheat_enclave_size:      {attr["preheat_enclave_size"]:#x}')
+        print(f'    edmm_lazyfree_th:          {attr["edmm_lazyfree_th"]}')
 
         if manifest_sgx['remote_attestation']:
             spid = manifest_sgx.get('ra_client_spid', '')
