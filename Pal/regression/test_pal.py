@@ -376,7 +376,9 @@ class TC_20_SingleProcess(RegressionTestCase):
         # Get Memory Available Quota
         self.assertIn('Get Memory Available Quota OK', stderr)
 
-    @expectedFailureIf(HAS_SGX)
+    @unittest.skipIf(HAS_SGX, 'Skip until EDMM support is enabled. For testing'
+                              ' with EDMM comment out this line and set '
+                              ' sgx.preheat_enclave_size = "0" in the manifest')
     def test_301_memory_nosgx(self):
         _, stderr = self.run_binary(['Memory'])
 

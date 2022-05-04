@@ -263,7 +263,6 @@ void* get_enclave_pages(void* addr, size_t size, pal_prot_flags_t prot, bool is_
     /* TODO: Should we introduce a compiler switch for EDMM? */
     struct edmm_heap_request heap_alloc = {0};
     struct edmm_heap_request heap_perm = {0};
-    int alloc_count = 0, perm_count = 0;
 
     if (!size)
         return NULL;
@@ -275,6 +274,12 @@ void* get_enclave_pages(void* addr, size_t size, pal_prot_flags_t prot, bool is_
     struct heap_vma* vma_above = NULL;
     struct heap_vma* vma;
     pal_prot_flags_t req_prot = (PAL_PROT_READ | PAL_PROT_WRITE | PAL_PROT_EXEC) & prot;
+    /* With EDMM an EPC page is allocated with RW permission and then the desired permission is
+     * is set. Restrict permission from RW -> W is architecturally not permitted and the driver will
+     * returns -EINVAL error. So adding READ permission if the page permission is only WRITE. */
+    if (req_prot == PAL_PROT_WRITE) {
+        req_prot = PAL_PROT_READ | PAL_PROT_WRITE;
+    }
 
     spinlock_lock(&g_heap_vma_lock);
 
@@ -318,14 +323,13 @@ out:
     if (g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap && ret != NULL) {
         /* Allocate EPC memory */
         for (uint32_t i = 0; i < heap_alloc.range_cnt; i++) {
-            alloc_count++;
             void* alloc_addr = heap_alloc.vma_range[i].addr;
             size_t alloc_size = heap_alloc.vma_range[i].size;
             uint32_t vma_prot = heap_alloc.vma_range[i].prot;
 
-            /* check if the requested region falls within pre-allocated region */
+            /* Check if the requested region falls within pre-allocated region and skip the
+               allocation */
             size_t non_overlapping_size = find_preallocated_heap_nonoverlap(alloc_addr, alloc_size);
-            /* Entire request overlaps with preallocated heap, so update the permissions */
             if (non_overlapping_size == 0)
                 continue;
 
@@ -356,13 +360,18 @@ out:
 
         /* Update page permissions */
         for (uint32_t i = 0; i < heap_perm.range_cnt; i++) {
-            perm_count++;
             void* vma_addr = heap_perm.vma_range[i].addr;
             size_t vma_size = heap_perm.vma_range[i].size;
             pal_prot_flags_t vma_prot = heap_perm.vma_range[i].prot;
 
+            /* Check if the requested region falls within pre-allocated region and skip the
+               page change permission request. */
+            size_t non_overlapping_size = find_preallocated_heap_nonoverlap(vma_addr, vma_size);
+            if (non_overlapping_size == 0)
+                continue;
+
             if ((req_prot & vma_prot) != vma_prot) {
-                int retval = restrict_enclave_page_permission(vma_addr, vma_size,
+                int retval = restrict_enclave_page_permission(vma_addr, non_overlapping_size,
                                                               req_prot & vma_prot);
                 if (retval < 0) {
                     ret = NULL;
@@ -372,7 +381,8 @@ out:
             }
 
             if (req_prot & ~vma_prot) {
-                int retval = relax_enclave_page_permission(vma_addr, vma_size, req_prot | vma_prot);
+                int retval = relax_enclave_page_permission(vma_addr, non_overlapping_size,
+                                                           req_prot | vma_prot);
                 if (retval < 0) {
                     ret = NULL;
                     goto release_lock;
@@ -508,7 +518,9 @@ int free_enclave_pages(void* addr, size_t size) {
 out:
     if (ret >=0 && g_pal_linuxsgx_state.manifest_keys.edmm_enable_heap) {
         for (uint32_t i = 0; i < heap_free.range_cnt; i++) {
-            size_t non_overlapping_size = find_preallocated_heap_nonoverlap(addr, size);
+            size_t non_overlapping_size =
+                find_preallocated_heap_nonoverlap(heap_free.vma_range[i].addr,
+                                                  heap_free.vma_range[i].size);
 
             /* Entire request overlaps with preallocated heap, so simply return. */
             if (non_overlapping_size == 0)
@@ -546,18 +558,33 @@ int update_enclave_page_permissions(void* addr, size_t size, pal_prot_flags_t pr
     }
 
     pal_prot_flags_t req_prot = (PAL_PROT_READ | PAL_PROT_WRITE | PAL_PROT_EXEC) & prot;
+    /* With EDMM an EPC page is allocated with RW permission and then the desired permission is
+     * is set. Restrict permission from RW -> W is architecturally not permitted and the driver will
+     * returns -EINVAL error. So adding READ permission if the page permission is only WRITE. */
+    if (req_prot == PAL_PROT_WRITE) {
+        req_prot = PAL_PROT_READ | PAL_PROT_WRITE;
+    }
+
     spinlock_lock(&g_heap_vma_lock);
+
+    /* Retain original permissions for pre-allocated EPC pages */
+    size_t non_overlapping_size = find_preallocated_heap_nonoverlap(addr, size);
+
+    /* Entire request overlaps with preallocated heap, so simply return. */
+    if (non_overlapping_size == 0) {
+        ret = 0;
+        goto release_lock;
+    }
 
     struct heap_vma* vma;
     struct heap_vma* p;
-
 
     bool vma_region_found = false;
     /* Find VMA associated with the request */
     LISTP_FOR_EACH_ENTRY_SAFE(vma, p, &g_heap_vma_list, list) {
         /* Since VMAs with same permissions are merged during allocation, request to change
          * permission should be within a single VMA region */
-        if (addr >= vma->bottom && addr + size <= vma->top) {
+        if (addr >= vma->bottom && addr + non_overlapping_size <= vma->top) {
             vma_region_found = true;
             break;
         }
@@ -591,19 +618,20 @@ int update_enclave_page_permissions(void* addr, size_t size, pal_prot_flags_t pr
         LIST_ADD(new, vma, list);
     }
 
-    if (vma->top > addr + size) {
+    if (vma->top > addr + non_overlapping_size) {
         /* create new VMA [addr + size, vma->top) */
         struct heap_vma* new = __alloc_vma();
         if (!new) {
-            log_error("Cannot split VMA during page permission update of address %p", addr + size);
+            log_error("Cannot split VMA during page permission update of address %p",
+                      addr + non_overlapping_size);
             ret = -PAL_ERROR_NOMEM;
             goto release_lock;
         }
         new->top             = vma->top;
-        new->bottom          = addr + size;
+        new->bottom          = addr + non_overlapping_size;
         new->prot            = vma->prot;
         new->is_pal_internal = vma->is_pal_internal;
-        vma->top = addr + size;
+        vma->top = addr + non_overlapping_size;
         struct heap_vma* vma_above = LISTP_PREV_ENTRY(vma, &g_heap_vma_list, list);
         INIT_LIST_HEAD(new, list);
         LISTP_ADD_AFTER(new, vma_above, &g_heap_vma_list, list);

@@ -502,10 +502,10 @@ def get_mrenclave_and_manifest(manifest_path, libpal, verbose=False):
     }
     attr['flags'], attr['xfrms'], attr['misc_select'] = get_enclave_attributes(manifest_sgx)
 
-    if attr['preheat_enclave_size'] < 0 or  \
-       is_aligned(attr['preheat_enclave_size'], offs.PAGESIZE) == 0:
-        raise Exception("preheat_enclave_size: {0} should be greater than or equal to 0!"
-                        .format(attr['preheat_enclave_size']))
+    if attr['edmm_enable_heap'] == 1 and (attr['preheat_enclave_size'] < 0 or
+       is_aligned(attr['preheat_enclave_size'], offs.PAGESIZE) == 0):
+        raise Exception("preheat_enclave_size: {0} should be greater than or equal to 0 and page"
+                        " aligned".format(attr['preheat_enclave_size']))
 
     if attr['edmm_lazyfree_th'] < 0 or attr['edmm_lazyfree_th'] > 100:
         raise Exception("edmm_lazyfree_th: {0} is a percent value and so ranges between 0 and 100!"

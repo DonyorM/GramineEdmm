@@ -187,14 +187,21 @@ int add_to_pending_free_epc(void* addr, size_t size, uint32_t prot) {
 int remove_from_pending_free_epc(void* addr, size_t size, struct edmm_heap_pool* updated_heap_alloc,
                                  struct edmm_heap_request* heap_req) {
     assert(spinlock_is_locked(&g_heap_vma_lock));
+    /* Amount of memory that is present in the lazy-free list */
     size_t allocated = 0;
+    /* Index representing entries that need to be allocated dynamically */
     int alloc_cnt = 0;
+
 
     if (!g_pal_linuxsgx_state.manifest_keys.edmm_lazyfree_th || !g_pending_free_size)
         goto out;
 
     struct edmm_heap_pool* pending_free_epc;
     struct edmm_heap_pool* temp;
+
+    /* Store previous free bottom pointer to see if there is unallocated memory between two pending
+    free regions */
+    void* prevfree_bottom = NULL;
     LISTP_FOR_EACH_ENTRY_SAFE(pending_free_epc, temp, &g_edmm_heap_pool_list, list) {
         void* pendingfree_top = (char*)pending_free_epc->addr + pending_free_epc->size;
         void* pendingfree_bottom = pending_free_epc->addr;
@@ -204,22 +211,32 @@ int remove_from_pending_free_epc(void* addr, size_t size, struct edmm_heap_pool*
         if (pendingfree_top <= addr)
             break;
 
+        /* Unallocated region between two pending free regions */
+        if (prevfree_bottom && pendingfree_top < prevfree_bottom) {
+            updated_heap_alloc[alloc_cnt].addr = pendingfree_top;
+            updated_heap_alloc[alloc_cnt].size = (char*)prevfree_bottom- (char*)pendingfree_top;
+
+            size -= updated_heap_alloc[alloc_cnt].size;
+            alloc_cnt++;
+        }
+        prevfree_bottom = pendingfree_bottom;
+
         if (pendingfree_bottom < addr) {
-            /* create a new entry for [pendingfree_bottom, addr) */
+             /* create a new entry for [pendingfree_bottom, addr) */
             struct edmm_heap_pool* new_pending_free = __alloc_heap();
             if (!new_pending_free) {
-                log_error("Updating pending free EPC pages failed during allocation %p\n", addr);
+                log_error("Updating pending free EPC pages failed during allocation %p", addr);
                 return -ENOMEM;
             }
             new_pending_free->addr = pendingfree_bottom;
             new_pending_free->size = (char*)addr - (char*)pendingfree_bottom;
             new_pending_free->prot = pending_free_epc->prot;
 
-            /* update size of the current pending_free entry after inserting new entry */
+            /* Update size of the current pending_free entry */
             pending_free_epc->addr = addr;
             pending_free_epc->size -= new_pending_free->size;
 
-            /* Adjust helper variable */
+            /* Adjust pendingfree_bottom to reflect the updated size */
             pendingfree_bottom = pending_free_epc->addr;
 
             INIT_LIST_HEAD(new_pending_free, list);
@@ -227,31 +244,17 @@ int remove_from_pending_free_epc(void* addr, size_t size, struct edmm_heap_pool*
         }
 
         if (pendingfree_top <= (void*)((char*)addr + size)) {
-            /* Special case when [addr, addr + size) exceeds a pending free region.
-             * So split into [addr, pendingfree_bottom) and [pendingfree_top, addr + size) */
-            if (pendingfree_bottom > addr && pendingfree_top < (void*)((char*)addr + size)) {
-                updated_heap_alloc[alloc_cnt].addr = pendingfree_top;
-                updated_heap_alloc[alloc_cnt].size = (char*)addr + size - (char*)pendingfree_top;
-                alloc_cnt++;
-                allocated += pending_free_epc->size;
-                size = (char*)pendingfree_bottom - (char*)addr;
-                goto release_entry;
-            }
-
-            /* Requested region either fully/partially overlaps with pending free epc range. So we
-             * can remove it from pending_free_epc list and update addr and size accordingly.
-             * Note: Here pendingfree_bottom >= addr condition will always be true even for
-             * pendingfree_bottom < *addr case due to earlier adjustment. */
-            if (pendingfree_top < (void*)((char*)addr + size)) {
-                addr = pendingfree_top;
-            }
-
             allocated += pending_free_epc->size;
-            size = size - pending_free_epc->size;
-
-release_entry:
             edmm_update_heap_request(pending_free_epc->addr, pending_free_epc->size,
                                      pending_free_epc->prot, heap_req);
+            /* Update the start addr and set it to pendingfree_top as the original start address
+             * was already allocated. */
+            if (pendingfree_top < (void*)((char*)addr + size)) {
+                addr = (void*)((char*)pending_free_epc->addr + pending_free_epc->size);
+                log_error("pendingfree_top <= (void*)((char*)addr + size; addr = %p", addr);
+            }
+            size -= pending_free_epc->size;
+
             LISTP_DEL(pending_free_epc, &g_edmm_heap_pool_list, list);
             __free_heap(pending_free_epc);
         } else {
@@ -261,14 +264,10 @@ release_entry:
 
             if (pendingfree_bottom >= addr) {
                 allocated += (char*)addr + size - (char*)pendingfree_bottom;
-                size = (char*)pendingfree_bottom - (char*)addr;
                 edmm_update_heap_request(pendingfree_bottom,
                                          (char*)addr + size - (char*)pendingfree_bottom,
                                          pending_free_epc->prot, heap_req);
-            } else {
-                allocated = size;
-                size = 0;
-                edmm_update_heap_request(addr, size, pending_free_epc->prot, heap_req);
+                size -= (char*)addr + size - (char*)pendingfree_bottom;
             }
         }
     }
@@ -280,7 +279,7 @@ out:
         alloc_cnt++;
     }
 
-    /* update the pending free size amount allocated*/
+    /* Update the pending free size */
     if (allocated)
         g_pending_free_size -= allocated;
 
@@ -313,6 +312,13 @@ int relax_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t prot
     while (start < end) {
        sgx_modpe(&secinfo_relax, start);
        start = (void*)((char*)start + g_pal_public_state.alloc_align);
+    }
+
+    /* Update OS page tables to match new EPCM permission */
+    int ret = ocall_mprotect(addr, size, prot);
+    if (ret < 0) {
+        log_error("mprotect for relax enclave %p page permission failed (%d)\n", addr, ret);
+        return ret;
     }
 
     return 0;

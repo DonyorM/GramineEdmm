@@ -727,6 +727,14 @@ static long sgx_ocall_remove_trimmed_pages(void* pms) {
     return ret;
 }
 
+static long sgx_ocall_mprotect(void* pms) {
+    ms_ocall_mprotect_t* ms = (ms_ocall_mprotect_t*)pms;
+    ODEBUG(OCALL_MPROTECT, ms);
+
+    long ret = DO_SYSCALL(mprotect, ms->ms_addr, ms->ms_len, ms->ms_prot);
+    return ret;
+}
+
 static long sgx_ocall_restrict_page_permissions(void* pms) {
     extern int g_isgx_device;
     ms_ocall_sgx_restrict_page_perm_t* ms = (ms_ocall_sgx_restrict_page_perm_t*)pms;
@@ -793,6 +801,7 @@ sgx_ocall_fn_t ocall_table[OCALL_NR] = {
     [OCALL_TRIM_EPC_PAGES]            = sgx_ocall_trim_epc_pages,
     [OCALL_REMOVE_TRIMMED_PAGES]      = sgx_ocall_remove_trimmed_pages,
     [OCALL_RESTRICT_PAGE_PERMISSIONS] = sgx_ocall_restrict_page_permissions,
+    [OCALL_MPROTECT]                  = sgx_ocall_mprotect,
 
 };
 

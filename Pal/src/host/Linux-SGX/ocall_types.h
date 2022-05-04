@@ -69,6 +69,7 @@ enum {
     OCALL_TRIM_EPC_PAGES,
     OCALL_REMOVE_TRIMMED_PAGES,
     OCALL_RESTRICT_PAGE_PERMISSIONS,
+    OCALL_MPROTECT,
     OCALL_NR,
 };
 
@@ -319,11 +320,10 @@ typedef struct {
 } ms_ocall_sgx_page_remove_t;
 
 typedef struct {
-    unsigned long long addr;
-    unsigned long long length;
-    unsigned long long secinfo;
-    unsigned long long count;
-} ms_ocall_sgx_relax_page_perm_t;
+    void*  ms_addr;
+    size_t ms_len;
+    int    ms_prot;
+} ms_ocall_mprotect_t;
 
 typedef struct {
     unsigned long long ms_addr;

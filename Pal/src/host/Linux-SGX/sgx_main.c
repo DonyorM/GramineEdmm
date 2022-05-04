@@ -816,7 +816,7 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
         goto out;
     }
 
-    if (!IS_ALIGNED(preheat_enclave_size, g_page_size)) {
+    if (edmm_enable_heap && !IS_ALIGNED(preheat_enclave_size, g_page_size)) {
         log_error("preheat_enclave_size should be page aligned: %ld", g_page_size);
         ret = -EINVAL;
         goto out;
