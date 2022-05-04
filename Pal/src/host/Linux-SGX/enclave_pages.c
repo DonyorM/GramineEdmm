@@ -35,6 +35,15 @@ static struct heap_vma g_heap_vma_pool[MAX_HEAP_VMAS];
 static size_t g_heap_vma_num = 0;
 static struct heap_vma* g_free_vma = NULL;
 
+static void print_vma_ranges(void) {
+    struct heap_vma* vma;
+    struct heap_vma* p;
+    log_debug("print_vma_ranges:");
+    LISTP_FOR_EACH_ENTRY_SAFE(vma, p, &g_heap_vma_list, list) {
+        log_debug("\tVMA Range: %p-%p, prot: 0x%x", vma->top, vma->bottom, vma->prot);
+    }
+}
+
 /* returns uninitialized heap_vma, the caller is responsible for setting at least bottom/top */
 static struct heap_vma* __alloc_vma(void) {
     assert(spinlock_is_locked(&g_heap_vma_lock));
@@ -281,7 +290,12 @@ void* get_enclave_pages(void* addr, size_t size, pal_prot_flags_t prot, bool is_
         req_prot = PAL_PROT_READ | PAL_PROT_WRITE;
     }
 
+    log_debug("start %s: addr = %p, size = 0x%lx, prot = 0x%x, req_prot = 0x%x", __func__, addr,
+              size, prot, req_prot);
+
     spinlock_lock(&g_heap_vma_lock);
+
+    print_vma_ranges();
 
     if (addr) {
         /* caller specified concrete address; find VMA right-above this address */
@@ -327,12 +341,16 @@ out:
             size_t alloc_size = heap_alloc.vma_range[i].size;
             uint32_t vma_prot = heap_alloc.vma_range[i].prot;
 
+            log_debug("heap_alloc.vma_range[%d].addr = %p, alloc_size = 0x%lx, vma_prot = 0x%x", i,
+                       alloc_addr,  alloc_size, vma_prot);
             /* Check if the requested region falls within pre-allocated region and skip the
                allocation */
             size_t non_overlapping_size = find_preallocated_heap_nonoverlap(alloc_addr, alloc_size);
             if (non_overlapping_size == 0)
                 continue;
 
+            log_debug("heap_alloc.vma_range[%d].addr = %p, non_overlapping_size = 0x%lx, vma_prot = 0x%x", i,
+                       alloc_addr,  non_overlapping_size, vma_prot);
             /* Check if the req. range is available in the pending_free EPC list, if so update the
              * list and continue to the next requested range. */
             struct edmm_heap_pool updated_heap_alloc[EDMM_HEAP_RANGE_CNT] = {0};
@@ -364,12 +382,16 @@ out:
             size_t vma_size = heap_perm.vma_range[i].size;
             pal_prot_flags_t vma_prot = heap_perm.vma_range[i].prot;
 
+            log_debug("heap_perm.vma_range[%d].addr = %p, alloc_size = 0x%lx, vma_prot = 0x%x", i,
+                       vma_addr, vma_size, vma_prot);
             /* Check if the requested region falls within pre-allocated region and skip the
                page change permission request. */
             size_t non_overlapping_size = find_preallocated_heap_nonoverlap(vma_addr, vma_size);
             if (non_overlapping_size == 0)
                 continue;
 
+            log_debug("heap_perm.vma_range[%d].addr = %p, non_overlapping_size = 0x%lx, vma_prot = 0x%x",
+                        i, vma_addr, non_overlapping_size, vma_prot);
             if ((req_prot & vma_prot) != vma_prot) {
                 int retval = restrict_enclave_page_permission(vma_addr, non_overlapping_size,
                                                               req_prot & vma_prot);
@@ -392,6 +414,9 @@ out:
     }
 
 release_lock:
+    log_debug("end %s: addr = %p, size = 0x%lx ", __func__, ret, size);
+    print_vma_ranges();
+
     spinlock_unlock(&g_heap_vma_lock);
 
     if (ret) {
@@ -428,8 +453,9 @@ int free_enclave_pages(void* addr, size_t size) {
         return -PAL_ERROR_INVAL;
     }
 
+    log_debug("start %s: addr = %p, size = 0x%lx", __func__, addr, size);
     spinlock_lock(&g_heap_vma_lock);
-
+    print_vma_ranges();
     /* VMA list contains both normal and pal-internal VMAs; it is impossible to free an area
      * that overlaps with VMAs of two types at the same time, so we fail in such cases */
     bool is_pal_internal_set = false;
@@ -446,6 +472,7 @@ int free_enclave_pages(void* addr, size_t size) {
         if (vma->top <= addr)
             break;
 
+        log_debug("vma = %p - %p, prot = %x", vma->top, vma->bottom, vma->prot);
         /* found VMA overlapping with area to free; check it is either normal or pal-internal */
         if (!is_pal_internal_set) {
             is_pal_internal = vma->is_pal_internal;
@@ -474,6 +501,10 @@ int free_enclave_pages(void* addr, size_t size) {
                 heap_free.vma_range[heap_free.range_cnt - 1].addr = free_heap_bottom;
                 heap_free.vma_range[heap_free.range_cnt - 1].size += range;
                 heap_free.vma_range[heap_free.range_cnt - 1].prot = vma->prot;
+                log_debug("heap_free vma#2 = %p - %p, prot = %x",
+                    heap_free.vma_range[heap_free.range_cnt - 1].addr,
+                    heap_free.vma_range[heap_free.range_cnt - 1].addr + heap_free.vma_range[heap_free.range_cnt - 1].size,
+                    vma->prot);
             } else {
                 assert(heap_free.range_cnt < EDMM_HEAP_RANGE_CNT);
                 /* found a new non-contiguous range */
@@ -481,6 +512,8 @@ int free_enclave_pages(void* addr, size_t size) {
                 heap_free.vma_range[heap_free.range_cnt].size = range;
                 heap_free.vma_range[heap_free.range_cnt].prot = vma->prot;
                 heap_free.range_cnt++;
+                 log_debug("heap_free vma#1 = %p - %p, prot = %x", free_heap_bottom,
+                    free_heap_bottom + range, vma->prot);
             }
         }
 
@@ -539,6 +572,8 @@ out:
             }
         }
     }
+    log_debug("end %s: addr = %p, size = 0x%lx", __func__, addr, size);
+    print_vma_ranges();
     spinlock_unlock(&g_heap_vma_lock);
     return ret;
 }
@@ -565,16 +600,20 @@ int update_enclave_page_permissions(void* addr, size_t size, pal_prot_flags_t pr
         req_prot = PAL_PROT_READ | PAL_PROT_WRITE;
     }
 
+    log_debug("%s: addr = %p, size = 0x%lx, prot = 0x%x", __func__, addr, size, req_prot);
     spinlock_lock(&g_heap_vma_lock);
+    print_vma_ranges();
 
     /* Retain original permissions for pre-allocated EPC pages */
     size_t non_overlapping_size = find_preallocated_heap_nonoverlap(addr, size);
 
     /* Entire request overlaps with preallocated heap, so simply return. */
     if (non_overlapping_size == 0) {
-        ret = 0;
-        goto release_lock;
+        goto out;
     }
+
+    log_debug("%s: addr = %p, non_overlapping_size = 0x%lx, prot = 0x%x", __func__, addr,
+               non_overlapping_size, req_prot);
 
     struct heap_vma* vma;
     struct heap_vma* p;
@@ -591,12 +630,14 @@ int update_enclave_page_permissions(void* addr, size_t size, pal_prot_flags_t pr
     }
 
     if (!vma_region_found) {
-        ret = -PAL_ERROR_INVAL;
+        log_error("VMA region addr = %p, size = 0x%lx not found!", addr, size);
+        ret = -PAL_ERROR_INVAL;;
         goto release_lock;
     }
 
     pal_prot_flags_t vma_prot = vma->prot;
     if (req_prot == vma_prot) {
+        log_error("%s: requested and vma perm are same, simply return!", __func__);
         goto out;
     }
 
@@ -658,6 +699,8 @@ int update_enclave_page_permissions(void* addr, size_t size, pal_prot_flags_t pr
 out:
     ret = 0;
 release_lock:
+    log_debug("end %s: addr = %p, size = 0x%lx, prot = 0x%x", __func__, addr, size, prot);
+    print_vma_ranges();
     spinlock_unlock(&g_heap_vma_lock);
     return ret;
 }

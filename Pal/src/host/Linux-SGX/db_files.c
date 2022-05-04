@@ -323,6 +323,8 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
             goto out;
         }
 
+        log_debug("Before copy_and_verify_trusted_file mem = %p, size = 0x%lx, prot = 0x%x, "
+                   "req_prot = 0x%x", mem, size, prot, req_prot);
         ret = copy_and_verify_trusted_file(handle->file.realpath, mem, handle->file.umem,
                                            aligned_offset, aligned_end, offset, end, chunk_hashes,
                                            handle->file.total);
@@ -330,6 +332,9 @@ static int file_map(PAL_HANDLE handle, void** addr, pal_prot_flags_t prot, uint6
             log_error("file_map - copy & verify on trusted file returned %d", ret);
             goto out;
         }
+
+        log_debug("After copy_and_verify_trusted_file mem = %p, size = 0x%lx, prot = 0x%x, "
+                   "req_prot = 0x%x", mem, size, prot, req_prot);
 
         size_t bytes_filled = end - offset;
         if (size > bytes_filled) {

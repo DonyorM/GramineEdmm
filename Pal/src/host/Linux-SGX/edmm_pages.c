@@ -20,6 +20,16 @@ static struct edmm_heap_pool g_edmm_heap_pool[MAX_EDMM_HEAP_RANGE];
 static size_t g_edmm_heap_rg_cnt;
 static struct edmm_heap_pool* g_edmm_heap_rg = NULL;
 
+static void print_lazy_free_ranges(void) {
+    struct edmm_heap_pool* vma;
+    struct edmm_heap_pool* p;
+    log_debug("print_lazy_free_ranges:");
+    LISTP_FOR_EACH_ENTRY_SAFE(vma, p, &g_edmm_heap_pool_list, list) {
+        log_debug("\tVMA lazy free Range: %p-%p, prot: 0x%x", vma->addr, vma->addr + vma->size,
+                     vma->prot);
+    }
+}
+
 void covert_lazyfree_threshold_to_bytes(void) {
     g_edmm_lazyfree_th_bytes = 0;
 
@@ -177,6 +187,7 @@ int add_to_pending_free_epc(void* addr, size_t size, uint32_t prot) {
         __free_heap(last_pending_free);
     }
 
+    print_lazy_free_ranges();
     return 0;
 }
 
@@ -205,6 +216,9 @@ int remove_from_pending_free_epc(void* addr, size_t size, struct edmm_heap_pool*
     LISTP_FOR_EACH_ENTRY_SAFE(pending_free_epc, temp, &g_edmm_heap_pool_list, list) {
         void* pendingfree_top = (char*)pending_free_epc->addr + pending_free_epc->size;
         void* pendingfree_bottom = pending_free_epc->addr;
+
+        log_debug("%s: pendingfree = %p - %p, prot = 0x%x", __func__, pendingfree_top,
+                  pendingfree_bottom, pending_free_epc->prot);
 
         if (pendingfree_bottom >= (void*)((char*)addr + size))
             continue;
@@ -302,6 +316,7 @@ int relax_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t prot
     void* start = addr;
     void* end = (void*)((char*)start + size);
 
+    log_debug("%s: addr = %p, size = 0x%lx, prot = 0x%x", __func__, addr, size, prot);
     alignas(64) sgx_arch_sec_info_t secinfo_relax;
     memset(&secinfo_relax, 0, sizeof(secinfo_relax));
 
@@ -329,6 +344,7 @@ int restrict_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t p
     void* start = addr;
     void* end = (void*)((char*)start + size);
 
+    log_debug("%s: addr = %p, size = 0x%lx, prot = 0x%x", __func__, addr, size, prot);
     uint32_t restrict_permissions;
     restrict_permissions = (prot & PAL_PROT_READ) ? SGX_SECINFO_FLAGS_R : 0;
     restrict_permissions |= (prot & PAL_PROT_WRITE) ? SGX_SECINFO_FLAGS_W : 0;
@@ -368,6 +384,7 @@ int free_edmm_page_range(void* start, size_t size) {
     void* end = (void*)((char*)addr + size);
     int ret = 0;
 
+    log_debug("%s: addr = %p, size = 0x%lx", __func__, addr, size);
     enum sgx_page_type type = SGX_PAGE_TYPE_TRIM;
     ret = ocall_trim_epc_pages(addr, size, type);
     if (ret < 0) {
@@ -410,6 +427,7 @@ int get_edmm_page_range(void* start_addr, size_t size) {
                     SGX_SECINFO_FLAGS_PENDING;
     memset(&secinfo.reserved, 0, sizeof(secinfo.reserved));
 
+    log_debug("%s: addr = %p, size = 0x%lx", __func__, start_addr, size);
     void* lo = start_addr;
     void* addr = (void*)((char*)lo + size);
 
