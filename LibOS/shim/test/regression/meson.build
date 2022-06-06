@@ -15,6 +15,7 @@ tests = {
     'device_passthrough': {},
     'double_fork': {},
     'edmm_heap_mmap': {
+        'c_args': '-pthread',
         'link_args': '-lm',
     },
     'epoll_epollet': {},
