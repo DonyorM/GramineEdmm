@@ -217,7 +217,7 @@ int add_to_pending_free_epc(void* addr, size_t size, uint32_t prot) {
         struct edmm_heap_pool* last_pending_free = LISTP_LAST_ENTRY(&g_edmm_heap_pool_list,
                                                                     struct edmm_heap_pool, list);
         int ret = 0;
-        if (g_pal_linuxsgx_state.edmm_demand_paging)
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
             ret = free_edmm_page_range_sparse(last_pending_free->addr, last_pending_free->size);
         else
             ret = free_edmm_page_range(last_pending_free->addr, last_pending_free->size);
@@ -421,6 +421,7 @@ int restrict_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t p
 
         start = (void*)((char*)start + g_pal_public_state.alloc_align);
     }
+    return 0;
 }
 
 // XXX: for demand paging, the region could be sparsely allocated
@@ -519,15 +520,6 @@ int get_edmm_page_range(void* start_addr, size_t size) {
         }
         if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
             edmm_bitmap_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)addr);
-
-        /* All new pages will have RW permissions initially, so after EAUG/EACCEPT, extend
-         * permission of a VALID enclave page (if needed). */
-        if (executable) {
-            alignas(64) sgx_arch_sec_info_t secinfo_extend = secinfo;
-
-            secinfo_extend.flags |= SGX_SECINFO_FLAGS_X;
-            sgx_modpe(&secinfo_extend, addr);
-        }
     }
 
     return 0;

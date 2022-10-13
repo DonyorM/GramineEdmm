@@ -895,29 +895,6 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
         goto out;
     }
 
-    bool edmm_demand_paging = false;
-    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_paging", /*defaultval=*/false,
-        &edmm_demand_paging);
-    if (ret < 0) {
-        log_error("Cannot parse 'sgx.edmm_demand_paging' (the value must be true or false)\n");
-        ret = -EINVAL;
-        goto out;
-    }
-    enclave_info->manifest_keys.edmm_demand_paging = edmm_demand_paging;
-
-    bool edmm_demand_bitmap = false;
-    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_bitmap", /*defaultval=*/false,
-                       &edmm_demand_bitmap);
-    if (ret < 0) {
-        log_error("Cannot parse 'sgx.edmm_demand_bitmap' (the value must be true or false)\n");
-        ret = -EINVAL;
-        goto out;
-    }
-    enclave_info->manifest_keys.edmm_demand_paging = edmm_demand_bitmap;
-
-    if (edmm_demand_bitmap)
-        enclave_info->demand_bitmap = demand_bitmap; // TODO this is clearly a bug
-
     ret = toml_bool_in(manifest_root, "sgx.vtune_profile", /*defaultval=*/false, &g_vtune_profile_enabled);
     if (ret < 0) {
         log_error("Cannot parse 'sgx.vtune_profile' (the value must be `true` or `false`)");

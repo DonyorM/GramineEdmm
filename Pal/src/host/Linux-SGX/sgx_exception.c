@@ -18,6 +18,7 @@
 
 #include <linux/signal.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "api.h"
 #include "cpu.h"
@@ -103,7 +104,7 @@ static int handle_sigsegv(siginfo_t* info, struct ucontext* uc) {
     uintptr_t fault_addr;
 
     __UNUSED(uc);
-
+    
     fault_addr = (uintptr_t)info->si_addr;
 
     ecall_allocate_page(fault_addr);

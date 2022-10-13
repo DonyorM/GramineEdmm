@@ -361,7 +361,7 @@ out:
                 return NULL;
             }
 
-            /* With demand paging, we don't do actual allocation here yet */
+            /* With demand paging, we don't do actual allocation here yet. However internal pages have to be allocated immediately */
             if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
                 continue;
 

@@ -43,9 +43,10 @@ extern struct pal_linuxsgx_state {
     void* heap_min;
     void* heap_max;
 
-    struct pal_sgx_manifest_config manifest_keys;
     unsigned long eaug_base;
     void* demand_bitmap;
+
+    struct pal_sgx_manifest_config manifest_keys;
 } g_pal_linuxsgx_state;
 
 int init_child_process(int parent_stream_fd, PAL_HANDLE* out_parent, uint64_t* out_instance_id);

@@ -455,6 +455,9 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
     g_pal_linuxsgx_state.heap_min = GET_ENCLAVE_TLS(heap_min);
     g_pal_linuxsgx_state.heap_max = GET_ENCLAVE_TLS(heap_max);
 
+    g_pal_linuxsgx_state.eaug_base = eaug_base;
+    g_pal_linuxsgx_state.demand_bitmap = demand_bitmap;
+
     struct pal_sgx_manifest_config manifest_keys;
     if (!sgx_copy_to_enclave(&manifest_keys,
                              sizeof(manifest_keys),
@@ -626,44 +629,6 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
     if (g_pal_linuxsgx_state.manifest_keys.preheat_enclave_size)
         // log_debug("%s: preheat start = %p, end = %p\n", __func__, (void*)i, g_pal_linuxsgx_state.heap_max);
         do_preheat_enclave();
-    // /* Extract EDMM mode */
-    // bool edmm_enable_heap;
-    // ret = toml_bool_in(g_pal_public_state.manifest_root, "sgx.edmm_enable_heap",
-    //                    /*defaultval=*/false, &edmm_enable_heap);
-    // if (ret < 0) {
-    //     log_error("Cannot parse 'sgx.edmm_enable_heap' (the value must be `true` or `false`)");
-    //     ocall_exit(1, /*is_exitgroup=*/true);
-    // }
-    // g_pal_linuxsgx_state.edmm_enable_heap = edmm_enable_heap;
-
-    // bool edmm_demand_paging = false;
-    // ret = toml_bool_in(manifest_root, "sgx.edmm_demand_paging", /*defaultval=*/false,
-    //     &edmm_demand_paging);
-    // if (ret < 0) {
-    //     log_error("Cannot parse 'sgx.edmm_demand_paging' (the value must be true or false)\n");
-    //     ocall_exit(1, /*is_exitgroup=*/true);
-    // }
-    // g_pal_linuxsgx_state.edmm_demand_paging = edmm_demand_paging;
-
-    // /* Extract enclave heap preheat options */
-    // uint64_t preheat_enclave_sz = 0;
-    // ret = toml_sizestring_in(manifest_root, "sgx.preheat_enclave_sz", /*defaultval=*/0,
-    //                          &preheat_enclave_sz);
-    // if (ret < 0) {
-    //     log_error("Cannot parse 'sgx.preheat_enclave_sz' (value must be put in double quotes!)\n");
-    //     ocall_exit(1, /*is_exitgroup=*/true);
-    // }
-
-    // g_pal_linuxsgx_state.preheat_enclave_sz = preheat_enclave_sz;
-    // if (g_pal_linuxsgx_state.preheat_enclave_sz > 0) {
-    //     uint8_t* i;
-    //     /* Heap allocation requests are serviced starting from highest heap address when ASLR is
-    //      * disabled. So optimizing for this case by preheating from the top of heap. */
-    //     if (g_pal_linuxsgx_state.edmm_enable_heap == 1)
-    //         i = (uint8_t*)g_pal_linuxsgx_state.heap_max - g_pal_linuxsgx_state.preheat_enclave_sz;
-    //     else
-    //         i = (uint8_t*)g_pal_linuxsgx_state.heap_min;
-
 
     /* For backward compatibility, `loader.pal_internal_mem_size` does not include
      * PAL_INITIAL_MEM_SIZE */
