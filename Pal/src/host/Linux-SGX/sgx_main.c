@@ -495,6 +495,7 @@ static int initialize_enclave(struct pal_enclave* enclave, const char* manifest_
                 gs->tcs_offset = tcs_area->addr - enclave->baseaddr + g_page_size * t;
                 gs->initial_stack_addr = stack_areas[t].addr + ENCLAVE_STACK_SIZE;
                 if (aux_stack_area) {
+                    assert(t <= AUX_MAX_THREAD_NUM);
                     gs->aux_stack_offset = aux_stack_area->addr + AUX_STACK_SIZE
                         - AUX_STACK_SIZE_PER_THREAD * t;
                 }

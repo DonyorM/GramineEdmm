@@ -188,7 +188,11 @@ enclave_entry:
     subq %gs:SGX_TCS_OFFSET, %rbx
     movq %rbx, %rcx
 
-    addq %gs:SGX_AUX_STACK_OFFSET, %rbx
+    # TODO: Remove this if the move is a better way
+    # TODO Rename SGX_AUX_STACK_OFFSET to SGX_AUX_STACK
+    # addq %gs:SGX_AUX_STACK_OFFSET, %rbx
+    # SGX_AUX_STACK_OFFSET is not actually an offset but is instead the address of the AUX Stack
+    movq %gs:SGX_AUX_STACK_OFFSET, %rbx
     movq %rbx, %rsp
 
     jmp .Lhandle_ecall_aux
@@ -751,7 +755,7 @@ sgx_ocall:
     xorq %r10, %r10
     subq %r11, %r11  # use sub to set flags to a fixed value
 
-    movq $EEXIT, %rax
+    movq $EEXIT, %rax # This is where segfault occurring on bad log debug
     ENCLU
 .Lcssa0_ocall_eexit_done:
     .cfi_endproc
