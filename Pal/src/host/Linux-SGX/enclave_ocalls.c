@@ -2034,6 +2034,8 @@ int ocall_restrict_page_permissions(void* addr, size_t size, uint64_t restrict_p
     WRITE_ONCE(ms->ms_length, (unsigned long long)size);
     WRITE_ONCE(ms->ms_permissions, (unsigned long long)restrict_permissions);
 
+    log_debug("%s: permissions = 0x%lx", __func__, restrict_permissions);
+
     do {
         retval = sgx_exitless_ocall(OCALL_RESTRICT_PAGE_PERMISSIONS, ms);
     } while (retval == -EINTR);

@@ -921,7 +921,7 @@ static int start_rpc(size_t threads_cnt) {
 
 int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* env,
                         size_t env_size, int parent_stream_fd, sgx_target_info_t* qe_targetinfo,
-                        struct pal_topo_info* topo_info, unsigned long eaug_base,
+                        struct pal_topo_info* topo_info,
                         void* demand_bitmap,
                         struct pal_sgx_manifest_config* manifest_keys) {
     g_rpc_queue = NULL;
@@ -945,7 +945,6 @@ int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* en
     ms.ms_parent_stream_fd = parent_stream_fd;
     ms.ms_qe_targetinfo    = qe_targetinfo;
     ms.ms_topo_info        = topo_info;
-    ms.ms_eaug_base        = eaug_base;
     ms.ms_demand_bitmap    = demand_bitmap;
     ms.ms_manifest_keys    = manifest_keys;
     ms.rpc_queue           = g_rpc_queue;

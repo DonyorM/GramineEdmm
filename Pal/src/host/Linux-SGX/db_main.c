@@ -426,7 +426,6 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
                              size_t args_size, char* uptr_env, size_t env_size,
                              int parent_stream_fd, sgx_target_info_t* uptr_qe_targetinfo,
                              struct pal_topo_info* uptr_topo_info,
-                             unsigned long eaug_base,
                              void* demand_bitmap,
                              struct pal_sgx_manifest_config* uptr_manifest_keys) {
     /* All our arguments are coming directly from the urts. We are responsible to check them. */
@@ -455,7 +454,6 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
     g_pal_linuxsgx_state.heap_min = GET_ENCLAVE_TLS(heap_min);
     g_pal_linuxsgx_state.heap_max = GET_ENCLAVE_TLS(heap_max);
 
-    g_pal_linuxsgx_state.eaug_base = eaug_base;
     g_pal_linuxsgx_state.demand_bitmap = demand_bitmap;
 
     struct pal_sgx_manifest_config manifest_keys;
@@ -627,7 +625,7 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
     }
 
     if (g_pal_linuxsgx_state.manifest_keys.preheat_enclave_size)
-        // log_debug("%s: preheat start = %p, end = %p\n", __func__, (void*)i, g_pal_linuxsgx_state.heap_max);
+        // log_debug("%s: preheat start = %p, end = %p\n", __func__, (void*)i, g_pal_linuxsgx_state.manifest_keys.heap_max);
         do_preheat_enclave();
 
     /* For backward compatibility, `loader.pal_internal_mem_size` does not include

@@ -504,7 +504,7 @@ int free_edmm_page_range(void* start, size_t size) {
  * 2. Driver catches this #PF and issues EAUG for the page (at this point the page becomes VALID and
  * may be used by the enclave). The control returns back to enclave.
  * 3. Enclave continues the same EACCEPT and the instruction succeeds this time. */
-int get_edmm_page_range(void* start_addr, size_t size) {
+int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot) {
     alignas(64) sgx_arch_sec_info_t secinfo;
     secinfo.flags = SGX_SECINFO_FLAGS_R | SGX_SECINFO_FLAGS_W | SGX_SECINFO_FLAGS_REG |
                     SGX_SECINFO_FLAGS_PENDING;
@@ -526,6 +526,13 @@ int get_edmm_page_range(void* start_addr, size_t size) {
         }
         if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
             edmm_bitmap_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)addr);
+
+        if (prot & PAL_PROT_EXEC) {
+            alignas(64) sgx_arch_sec_info_t secinfo_extend = secinfo;
+
+            secinfo_extend.flags |= SGX_SECINFO_FLAGS_X;
+            sgx_modpe(&secinfo_extend, addr);
+        }
     }
 
     return 0;
