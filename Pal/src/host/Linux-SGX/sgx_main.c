@@ -1142,7 +1142,7 @@ static int load_enclave(struct pal_enclave* enclave, char* args, size_t args_siz
 
     /* start running trusted PAL */
     ecall_enclave_start(enclave->libpal_uri, args, args_size, env, env_size, parent_stream_fd,
-                        &qe_targetinfo, &topo_info, enclave->eaug_base, enclave->demand_bitmap, &enclave->manifest_keys);
+                        &qe_targetinfo, &topo_info, enclave->demand_bitmap, &enclave->manifest_keys);
 
     unmap_tcs();
     DO_SYSCALL(munmap, alt_stack, ALT_STACK_SIZE);

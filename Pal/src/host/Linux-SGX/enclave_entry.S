@@ -755,7 +755,7 @@ sgx_ocall:
     xorq %r10, %r10
     subq %r11, %r11  # use sub to set flags to a fixed value
 
-    movq $EEXIT, %rax # This is where segfault occurring on bad log debug
+    movq $EEXIT, %rax
     ENCLU
 .Lcssa0_ocall_eexit_done:
     .cfi_endproc

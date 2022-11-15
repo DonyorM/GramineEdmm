@@ -8,6 +8,7 @@
 #include "rpc_queue.h"
 #include "sgx_arch.h"
 #include "edmm_pages.h"
+#include "enclave_pages.h"
 
 #define SGX_CAST(type, item) ((type)(item))
 
@@ -137,13 +138,15 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         pal_linux_main(READ_ONCE(ms->ms_libpal_uri), READ_ONCE(ms->ms_libpal_uri_len),
                        READ_ONCE(ms->ms_args), READ_ONCE(ms->ms_args_size), READ_ONCE(ms->ms_env),
                        READ_ONCE(ms->ms_env_size), READ_ONCE(ms->ms_parent_stream_fd),
-                       READ_ONCE(ms->ms_qe_targetinfo), topo_info, READ_ONCE(ms->ms_eaug_base),
+                       READ_ONCE(ms->ms_qe_targetinfo), topo_info,
                        READ_ONCE(ms->ms_demand_bitmap), manifest_keys);
     } else {
         // ENCLAVE_START already called (maybe successfully, maybe not), so
         // only valid ecall is THREAD_START.
         if (ecall_index == ECALL_ALLOCATE_PAGE) {
-            get_edmm_page_range(*(void **)ecall_args, PRESET_PAGESIZE);
+            void* addr = *(void **)ecall_args;
+            pal_prot_flags_t prot = get_page_perms(addr);
+            get_edmm_page_range(addr, PRESET_PAGESIZE, prot);
             return;
         }
 

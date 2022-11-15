@@ -43,7 +43,6 @@ extern struct pal_linuxsgx_state {
     void* heap_min;
     void* heap_max;
 
-    unsigned long eaug_base;
     void* demand_bitmap;
 
     struct pal_sgx_manifest_config manifest_keys;
@@ -62,7 +61,7 @@ extern size_t g_pal_internal_mem_size;
 noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char* uptr_args,
                              size_t args_size, char* uptr_env, size_t env_size,
                              int parent_stream_fd, sgx_target_info_t* uptr_qe_targetinfo,
-                             struct pal_topo_info* uptr_topo_info, unsigned long eaug_base,
+                             struct pal_topo_info* uptr_topo_info,
                              void* demand_bitmap,
                              struct pal_sgx_manifest_config* uptr_manifest_keys);
 void pal_start_thread(void);

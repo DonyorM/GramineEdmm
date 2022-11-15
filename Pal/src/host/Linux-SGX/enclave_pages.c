@@ -361,13 +361,13 @@ out:
                 return NULL;
             }
 
-            /* With demand paging, we don't do actual allocation here yet. However internal pages have to be allocated immediately */
+            /* With demand paging, we don't do actual allocation here yet */
             if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
                 continue;
 
             for (int j= 0; j < req_cnt; j++) {
                 int retval = get_edmm_page_range(updated_heap_alloc[j].addr,
-                                                 updated_heap_alloc[j].size);
+                                                 updated_heap_alloc[j].size, 0);
                 if (retval < 0) {
                     ret = NULL;
                     goto release_lock;
@@ -691,6 +691,11 @@ int update_enclave_page_permissions(void* addr, size_t size, pal_prot_flags_t pr
     size_t vma_size = vma->top - vma->bottom;
     void* vma_addr = vma->bottom;
     if ((req_prot & vma_prot) != vma_prot) {
+        log_debug("Going to go from 0x%x to 0x%x", vma_prot, (req_prot & vma_prot));
+        // if (vma_prot == (PAL_PROT_READ | PAL_PROT_WRITE | PAL_PROT_EXEC)) {
+        //     vma_prot &= ~PAL_PROT_EXEC;
+        //     log_debug("Adjusted vma prot to 0x%x", vma_prot);
+        // }
         vma_prot = req_prot & vma_prot;
         ret = restrict_enclave_page_permission(vma_addr, vma_size, vma_prot);
         if (ret < 0)
@@ -711,5 +716,102 @@ release_lock:
     log_debug("end %s: addr = %p, size = 0x%lx, prot = 0x%x", __func__, addr, size, prot);
     print_vma_ranges();
     spinlock_unlock(&g_heap_vma_lock);
+    return ret;
+}
+
+pal_alloc_flags_t get_page_perms(void* addr) {
+
+    if (!IS_ALIGNED_PTR(addr, g_page_size)
+        || addr < g_pal_linuxsgx_state.heap_min
+        || addr + g_page_size > g_pal_linuxsgx_state.heap_max) {
+        return -PAL_ERROR_INVAL;
+    }
+
+    struct heap_vma* vma;
+    struct heap_vma* p;
+
+    bool vma_region_found = false;
+    /* Find VMA associated with the request */
+    LISTP_FOR_EACH_ENTRY_SAFE(vma, p, &g_heap_vma_list, list) {
+        /* Since VMAs with same permissions are merged during allocation, request to change
+         * permission should be within a single VMA region */
+        if (addr >= vma->bottom && addr + g_page_size <= vma->top) {
+            vma_region_found = true;
+            break;
+        }
+    }
+
+     if (!vma_region_found) {
+        // log_error("VMA region addr = %p not found!", addr);
+        return -PAL_ERROR_INVAL;;
+    }
+
+    return vma->prot;
+}
+
+int set_prot_for_new_page(void* addr) {
+    log_debug("%s: addr = %p", __func__, addr);
+    if (!IS_ALIGNED_PTR(addr, g_page_size)
+        || addr < g_pal_linuxsgx_state.heap_min
+        || addr + g_page_size > g_pal_linuxsgx_state.heap_max) {
+        return -PAL_ERROR_INVAL;
+    }
+
+    int ret = 0;
+
+    pal_prot_flags_t start_prot = PAL_PROT_READ | PAL_PROT_WRITE;
+
+    /* Retain original permissions for pre-allocated EPC pages */
+    size_t non_overlapping_size = find_preallocated_heap_nonoverlap(addr, g_page_size);
+
+    /* Entire request overlaps with preallocated heap, so simply return. */
+    if (non_overlapping_size == 0) {
+        goto out;
+    }
+
+    struct heap_vma* vma;
+    struct heap_vma* p;
+
+    bool vma_region_found = false;
+    /* Find VMA associated with the request */
+    LISTP_FOR_EACH_ENTRY_SAFE(vma, p, &g_heap_vma_list, list) {
+        /* Since VMAs with same permissions are merged during allocation, request to change
+         * permission should be within a single VMA region */
+        if (addr >= vma->bottom && addr + non_overlapping_size <= vma->top) {
+            vma_region_found = true;
+            break;
+        }
+    }
+
+    if (!vma_region_found) {
+        // log_error("VMA region addr = %p not found!", addr);
+        ret = -PAL_ERROR_INVAL;;
+        goto out;
+    }
+
+    pal_prot_flags_t vma_prot = vma->prot;
+    if (vma_prot == start_prot) {
+        log_debug("%s: vma already had starting permissions, doing nothing", __func__);
+        goto out;
+    }
+
+    if ((start_prot & vma_prot) != start_prot) {
+        start_prot = start_prot & vma_prot;
+        ret = restrict_enclave_page_permission(addr, g_page_size, start_prot);
+        if (ret < 0)
+            goto error;
+    }
+
+    if (vma_prot & ~start_prot) {
+        start_prot = start_prot | vma_prot;
+        ret = relax_enclave_page_permission(addr, g_page_size, start_prot);
+        if (ret < 0)
+            goto error;
+    }
+
+out:
+    ret = 0;
+error:
+    // log_debug("end %s: addr = %p, ret = %d", __func__, addr, ret);
     return ret;
 }

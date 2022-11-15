@@ -19,7 +19,7 @@ struct pal_sgx_manifest_config {
 
 int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* env, size_t env_size,
                         int parent_stream_fd, sgx_target_info_t* qe_targetinfo,
-                        struct pal_topo_info* topo_info, unsigned long eaug_base, void* demand_bitmap,
+                        struct pal_topo_info* topo_info, void* demand_bitmap,
                         struct pal_sgx_manifest_config* manifest_keys);
 
 int ecall_thread_start(void);

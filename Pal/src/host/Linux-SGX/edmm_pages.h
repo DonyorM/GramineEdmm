@@ -34,7 +34,7 @@ void edmm_update_heap_request(void* addr, size_t size, pal_prot_flags_t prot,
                               struct edmm_heap_request* heap_req);
 int free_edmm_page_range_sparse(void* start, size_t size);
 int free_edmm_page_range(void* start, size_t size);
-int get_edmm_page_range(void* start_addr, size_t size);
+int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot);
 int relax_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t prot);
 int restrict_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t prot);
 int add_to_pending_free_epc(void* addr, size_t size, uint32_t prot);
