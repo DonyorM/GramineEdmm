@@ -128,9 +128,12 @@ int main(void) {
             "nop\n"
             ::: "rax", "rbx", "rdx", "cc");
 
+    pal_printf("We got this far\n");
     DkSetExceptionHandler(handler3, PAL_EVENT_MEMFAULT);
     *(volatile long*)0x1000 = 0;
     __asm__ volatile("nop");
+
+    pal_printf("But not this far\n");
 
     DkSetExceptionHandler(handler4, PAL_EVENT_ARITHMETIC_ERROR);
     red_zone_test();
