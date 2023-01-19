@@ -146,6 +146,10 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         if (ecall_index == ECALL_ALLOCATE_PAGE) {
             void* addr = *(void **)ecall_args;
             pal_prot_flags_t prot = get_page_perms(addr);
+            if (prot < 0) {
+                // We had an error finding the page, but can't print here as that will cause a second exception so just returning
+                return;
+            }
             get_edmm_page_range(addr, PRESET_PAGESIZE, prot);
             return;
         }

@@ -625,7 +625,6 @@ noreturn void pal_linux_main(char* uptr_libpal_uri, size_t libpal_uri_len, char*
     }
 
     if (g_pal_linuxsgx_state.manifest_keys.preheat_enclave_size)
-        // log_debug("%s: preheat start = %p, end = %p\n", __func__, (void*)i, g_pal_linuxsgx_state.manifest_keys.heap_max);
         do_preheat_enclave();
 
     /* For backward compatibility, `loader.pal_internal_mem_size` does not include

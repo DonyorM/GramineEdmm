@@ -105,16 +105,6 @@ static bool interrupted_in_aex_profiling(void) {
 #define EDMM_BITMAP_OFFSET(x) ((x) >> 6)
 #define EDMM_BITMAP_BITMASK(x) (1UL << ((x)&0x3f))
 
-static inline unsigned long edmm_bitmap_is_set(unsigned long addr)
-{
-    volatile unsigned long *bitmap = g_pal_linuxsgx_state.demand_bitmap;
-    unsigned long pg = addr >> PAGE_SHIFT;
-    unsigned long bit_val;
-    bit_val = *(bitmap + EDMM_BITMAP_OFFSET(pg));
-
-    return bit_val & EDMM_BITMAP_BITMASK(pg);
-}
-
 static int handle_sigsegv(siginfo_t* info, struct ucontext* uc) {
     int rc = 0;
     uintptr_t fault_addr;
@@ -122,12 +112,6 @@ static int handle_sigsegv(siginfo_t* info, struct ucontext* uc) {
     __UNUSED(uc);
 
     fault_addr = (uintptr_t)info->si_addr;
-
-    if (edmm_bitmap_is_set(fault_addr)) {
-        // If the page has already been allocated then the segfault is unrelated to demand paging
-        // And we will raise it up the chain
-        return rc;
-    }
 
     ecall_allocate_page(fault_addr);
 

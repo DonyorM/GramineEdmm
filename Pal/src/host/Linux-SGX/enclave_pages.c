@@ -737,7 +737,6 @@ pal_alloc_flags_t get_page_perms(void* addr) {
     }
 
      if (!vma_region_found) {
-        // log_error("VMA region addr = %p not found!", addr);
         return -PAL_ERROR_INVAL;;
     }
 
@@ -779,7 +778,7 @@ int set_prot_for_new_page(void* addr) {
     }
 
     if (!vma_region_found) {
-        // log_error("VMA region addr = %p not found!", addr);
+        log_error("VMA region addr = %p not found!", addr);
         ret = -PAL_ERROR_INVAL;;
         goto out;
     }
@@ -807,6 +806,6 @@ int set_prot_for_new_page(void* addr) {
 out:
     ret = 0;
 error:
-    // log_debug("end %s: addr = %p, ret = %d", __func__, addr, ret);
+    log_debug("end %s: addr = %p, ret = %d", __func__, addr, ret);
     return ret;
 }

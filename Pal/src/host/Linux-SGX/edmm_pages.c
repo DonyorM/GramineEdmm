@@ -403,9 +403,6 @@ int restrict_enclave_page_permission(void* addr, size_t size, pal_prot_flags_t p
     restrict_permissions |= (prot & PAL_PROT_WRITE) ? SGX_SECINFO_FLAGS_W : 0;
     restrict_permissions |= (prot & PAL_PROT_EXEC) ? SGX_SECINFO_FLAGS_X : 0;
 
-    // Bug seems to be around here. We're calling this function with 0x5 but it fails and returns
-    // Later debug operations reveal that the permissions have been set to 0x1?
-
     log_debug("%s: restrict_permissions = 0x%x", __func__, restrict_permissions);
     int ret = ocall_restrict_page_permissions(addr, size, restrict_permissions);
     if (ret < 0) {
@@ -510,9 +507,9 @@ int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot) {
                     SGX_SECINFO_FLAGS_PENDING;
     memset(&secinfo.reserved, 0, sizeof(secinfo.reserved));
 
-    // Found a bug where if we are in an exception state (cssa was set to 1) calling any other ocall will fail
-    // Should probably handle that since demand allocation technically causes an exception
-    // log_debug("%s: addr = %p, size = 0x%lx", __func__, start_addr, size);
+    /* As of 01/19/2022 we can't do debug or print statements if demand paging is active
+    since we're in an exception state (cssa = 1) and any ocall will fail -- D.M. */
+
     void* lo = start_addr;
     void* addr = (void*)((char*)lo + size);
 
