@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 
+#define DEMAND_ALLOC_PAGES 8
+
 #ifndef _ENCLAVE_ECALLS_H_
 #define _ENCLAVE_ECALLS_H_
 

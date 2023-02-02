@@ -145,12 +145,15 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         // only valid ecall is THREAD_START.
         if (ecall_index == ECALL_ALLOCATE_PAGE) {
             void* addr = *(void **)ecall_args;
-            pal_prot_flags_t prot = get_page_perms(addr);
-            if (prot < 0) {
-                // We had an error finding the page, but can't print here as that will cause a second exception so just returning
-                return;
+            for (int i = 0; i < DEMAND_ALLOC_PAGES; i++) {
+                uintptr_t new_addr = ((uintptr_t) addr) + (PRESET_PAGESIZE * i);
+                pal_prot_flags_t prot = get_page_perms((void*) new_addr);
+                if (prot < 0) {
+                    // We had an error finding the page, but can't print here as that will cause a second exception so just skipping
+                    continue;
+                }
+                get_edmm_page_range((void*)new_addr, PRESET_PAGESIZE, prot);
             }
-            get_edmm_page_range(addr, PRESET_PAGESIZE, prot);
             return;
         }
 

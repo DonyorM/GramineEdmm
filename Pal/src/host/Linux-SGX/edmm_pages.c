@@ -515,10 +515,14 @@ int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot) {
 
     while (lo < addr) {
         addr = (void*)((char*)addr - g_pal_public_state.alloc_align);
+        if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging 
+            && edmm_bitmap_is_set(g_pal_linuxsgx_state.demand_bitmap, (unsigned long)addr)) {
+            continue;
+        }
 
         int ret = sgx_accept(&secinfo, addr);
         if (ret) {
-            log_error("EDMM accept page failed: %p %d\n", addr, ret);
+            // log_error("EDMM accept page failed: %p %d\n", addr, ret);
             return -EFAULT;
         }
         if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging)
