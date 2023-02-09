@@ -569,6 +569,18 @@ lazy manner. Until this threshold is met, Gramine doesn't release any
 dynamically allocated memory. This optimization helps reduce the expensive
 enclave entries/exits associated with dynamic freeing of EPC pages.
 
+EDMM Demand Paging Optimization (Experimental)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+::
+
+    sgx.edmm_demand_paging = [NUM]
+    (Default: 0)
+
+This syntax specifies the number of pages that should be EACCEPTed into the
+enclave on a page fault. If 0, demand paging is disabled and all pages are 
+EACCEPTed on enclave load.
+
 Optional CPU features (AVX, AVX512, MPX, PKRU, AMX)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

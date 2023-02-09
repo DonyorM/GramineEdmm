@@ -211,7 +211,7 @@ def get_memory_areas(attr, libpal):
         areas.append(MemoryArea('sig_stack', size=offs.ENCLAVE_SIG_STACK_SIZE,
                                 flags=PAGEINFO_R | PAGEINFO_W | PAGEINFO_REG))
 
-    if edmm_demand_paging:
+    if edmm_demand_paging > 0:
         areas.append(MemoryArea('aux_stack', size=AUX_STACK_SIZE,
                                 flags=PAGEINFO_R | PAGEINFO_W | PAGEINFO_REG))
 

@@ -145,10 +145,10 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
         // only valid ecall is THREAD_START.
         if (ecall_index == ECALL_ALLOCATE_PAGE) {
             void* addr = *(void **)ecall_args;
-            for (int i = 0; i < DEMAND_ALLOC_PAGES; i++) {
+            for (uint64_t i = 0; i < g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging; i++) {
                 uintptr_t new_addr = ((uintptr_t) addr) + (PRESET_PAGESIZE * i);
                 pal_prot_flags_t prot = get_page_perms((void*) new_addr);
-                if (prot < 0) {
+                if ((int)prot < 0) {
                     // We had an error finding the page, but can't print here as that will cause a second exception so just skipping
                     continue;
                 }

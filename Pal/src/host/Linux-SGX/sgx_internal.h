@@ -53,7 +53,7 @@ struct pal_enclave {
     bool remote_attestation_enabled;
     bool use_epid_attestation; /* Valid only if `remote_attestation_enabled` is true, selects
                                 * EPID/DCAP attestation scheme. */
-    bool edmm_demand_paging;
+    uint64_t edmm_demand_paging;
     bool edmm_demand_bitmap;
     void* demand_bitmap;
 

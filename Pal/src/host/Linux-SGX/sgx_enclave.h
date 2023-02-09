@@ -10,7 +10,7 @@
 /* SGX manifest options */
 struct pal_sgx_manifest_config {
     bool edmm_enable_heap;
-    bool edmm_demand_paging;
+    uint64_t edmm_demand_paging;
     bool edmm_demand_bitmap;
     uint64_t preheat_enclave_size;
     uint64_t edmm_lazyfree_th;

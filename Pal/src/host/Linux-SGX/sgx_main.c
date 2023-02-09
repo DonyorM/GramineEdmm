@@ -208,7 +208,7 @@ static int initialize_enclave(struct pal_enclave* enclave, const char* manifest_
     char* sig_path = NULL;
     char* token_path = NULL;
     int sigfile_fd = -1, token_fd = -1;
-    bool edmm_demand_paging = enclave->manifest_keys.edmm_demand_paging;
+    uint64_t edmm_demand_paging = enclave->manifest_keys.edmm_demand_paging;
 
     int enclave_mem = -1;
 
@@ -836,11 +836,11 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
     ret = toml_sizestring_in(manifest_root, "sgx.preheat_enclave_size", /*defaultval=*/0,
                              &preheat_enclave_size);
 
-    bool edmm_demand_paging = false;
-    ret = toml_bool_in(manifest_root, "sgx.edmm_demand_paging", /*defaultval=*/false,
+    int64_t edmm_demand_paging = 0;
+    ret = toml_int_in(manifest_root, "sgx.edmm_demand_paging", /*defaultval=*/false,
                        &edmm_demand_paging);
-    if (ret < 0) {
-        log_error("Cannot parse 'sgx.edmm_demand_paging' (the value must be true or false)\n");
+    if (ret < 0 || edmm_demand_paging < 0) {
+        log_error("Cannot parse 'sgx.edmm_demand_paging' (the value must be an integer >= 0)\n");
         ret = -EINVAL;
         goto out;
     }

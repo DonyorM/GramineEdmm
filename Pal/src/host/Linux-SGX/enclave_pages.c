@@ -737,7 +737,7 @@ pal_alloc_flags_t get_page_perms(void* addr) {
     }
 
      if (!vma_region_found) {
-        return -PAL_ERROR_INVAL;;
+        return -PAL_ERROR_INVAL;
     }
 
     return vma->prot;
