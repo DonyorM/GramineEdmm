@@ -465,6 +465,10 @@ int free_edmm_page_range(void* start, size_t size) {
     int ret = 0;
 
     log_debug("%s: addr = %p, size = 0x%lx", __func__, addr, size);
+    // This ensures that none of the pages to be removed have been swapped
+    for (char* tempaddr = (char*)addr; tempaddr < (char*)end; tempaddr += g_page_size) {
+        *tempaddr = 1;
+    }
     enum sgx_page_type type = SGX_PAGE_TYPE_TRIM;
     ret = ocall_trim_epc_pages(addr, size, type);
     if (ret < 0) {
