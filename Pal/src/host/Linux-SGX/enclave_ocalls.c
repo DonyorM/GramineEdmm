@@ -240,6 +240,35 @@ int ocall_mmap_untrusted(void** addrptr, size_t size, int prot, int flags, int f
     return 0;
 }
 
+int ocall_madvise(void *addr, size_t length, int advice) {
+    int retval = 0;
+    ms_ocall_madvise_t* ms;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        sgx_reset_ustack(old_ustack);
+        return -EPERM;
+    }
+
+    WRITE_ONCE(ms->ms_addr, addr);
+    WRITE_ONCE(ms->ms_length, length);
+    WRITE_ONCE(ms->ms_advice, advice);
+    do {
+        retval = sgx_exitless_ocall(OCALL_MADVISE, ms);
+    } while (retval == -EINTR);
+
+    if (retval < 0) {
+        if (retval != -EACCES && retval != -EAGAIN && retval != -EBADF && retval != -EINVAL &&
+                retval != -ENFILE && retval != -ENODEV && retval != -ENOMEM && retval != -EPERM) {
+            retval = -EPERM;
+        }
+    }
+
+    sgx_reset_ustack(old_ustack);
+    return retval;
+}
+
 int ocall_munmap_untrusted(const void* addr, size_t size) {
     int retval = 0;
     ms_ocall_munmap_untrusted_t* ms;

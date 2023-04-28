@@ -100,6 +100,16 @@ static long sgx_ocall_mmap_untrusted(void* pms) {
     return 0;
 }
 
+static long sgx_ocall_madvise(void* pms) {
+    ms_ocall_madvise_t* ms = (ms_ocall_madvise_t*)pms;
+    int ret;
+    ODEBUG(OCALL_MADVISE, ms);
+
+    ret = DO_SYSCALL(madvise, ms->ms_addr, ms->ms_length, ms->ms_advice);
+
+    return ret;
+}
+
 static long sgx_ocall_munmap_untrusted(void* pms) {
     ms_ocall_munmap_untrusted_t* ms = (ms_ocall_munmap_untrusted_t*)pms;
     ODEBUG(OCALL_MUNMAP_UNTRUSTED, ms);
@@ -802,7 +812,7 @@ sgx_ocall_fn_t ocall_table[OCALL_NR] = {
     [OCALL_REMOVE_TRIMMED_PAGES]      = sgx_ocall_remove_trimmed_pages,
     [OCALL_RESTRICT_PAGE_PERMISSIONS] = sgx_ocall_restrict_page_permissions,
     [OCALL_MPROTECT]                  = sgx_ocall_mprotect,
-
+    [OCALL_MADVISE]                    = sgx_ocall_madvise
 };
 
 #define EDEBUG(code, ms) \

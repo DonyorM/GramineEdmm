@@ -70,6 +70,7 @@ enum {
     OCALL_REMOVE_TRIMMED_PAGES,
     OCALL_RESTRICT_PAGE_PERMISSIONS,
     OCALL_MPROTECT,
+    OCALL_MADVISE,
     OCALL_NR,
 };
 
@@ -86,6 +87,12 @@ typedef struct {
     int ms_fd;
     off_t ms_offset;
 } ms_ocall_mmap_untrusted_t;
+
+typedef struct {
+    void* ms_addr;
+    size_t ms_length;
+    int ms_advice;
+} ms_ocall_madvise_t;
 
 typedef struct {
     const void* ms_addr;

@@ -517,6 +517,8 @@ int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot) {
     void* lo = start_addr;
     void* addr = (void*)((char*)lo + size);
 
+    ocall_madvise(start_addr, size, MADV_WILLNEED);
+    
     while (lo < addr) {
         addr = (void*)((char*)addr - g_pal_public_state.alloc_align);
         if (g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging 
