@@ -55,6 +55,7 @@ struct pal_enclave {
                                 * EPID/DCAP attestation scheme. */
     uint64_t edmm_demand_paging;
     bool edmm_demand_bitmap;
+    bool edmm_range_alloc;
     void* demand_bitmap;
 
     char* libpal_uri; /* Path to the PAL binary */

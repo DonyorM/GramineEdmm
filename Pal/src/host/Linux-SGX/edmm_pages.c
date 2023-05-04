@@ -466,9 +466,9 @@ int free_edmm_page_range(void* start, size_t size) {
 
     log_debug("%s: addr = %p, size = 0x%lx", __func__, addr, size);
     // This ensures that none of the pages to be removed have been swapped
-    for (char* tempaddr = (char*)addr; tempaddr < (char*)end; tempaddr += g_page_size) {
-        *tempaddr = 1;
-    }
+    // for (char* tempaddr = (char*)addr; tempaddr < (char*)end; tempaddr += g_page_size) {
+    //     *tempaddr = 1; // This causes problems in redis for some reason, need to investiagte
+    // }
     enum sgx_page_type type = SGX_PAGE_TYPE_TRIM;
     ret = ocall_trim_epc_pages(addr, size, type);
     if (ret < 0) {
@@ -517,7 +517,13 @@ int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot) {
     void* lo = start_addr;
     void* addr = (void*)((char*)lo + size);
 
-    ocall_madvise(start_addr, size, MADV_WILLNEED);
+    if (g_pal_linuxsgx_state.manifest_keys.edmm_range_alloc) {
+        int ret = ocall_madvise(start_addr, size, MADV_WILLNEED);
+        if (ret < 0 && !g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging) { 
+            // If demand paging is enabled, log_error causes a segfault (because we can't use system calls in demand paging mode), so we'll swallow the error in that case -- D.M. 01/05/2023
+            log_error("madvise returned error %d\n", ret);
+        }
+    }
     
     while (lo < addr) {
         addr = (void*)((char*)addr - g_pal_public_state.alloc_align);

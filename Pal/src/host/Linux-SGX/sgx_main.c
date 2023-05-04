@@ -832,6 +832,16 @@ static int parse_loader_config(char* manifest, struct pal_enclave* enclave_info)
     }
     enclave_info->manifest_keys.edmm_enable_heap = edmm_enable_heap;
 
+    bool edmm_range_alloc;
+    ret = toml_bool_in(manifest_root, "sgx.edmm_range_alloc", /*defaultval=*/false,
+                       &edmm_range_alloc);
+    if (ret < 0 ) {
+        log_error("Cannot parse 'sgx.edmm_range_alloc' (the value must be true or false)");
+        ret = -EINVAL;
+        goto out;
+    }
+    enclave_info->manifest_keys.edmm_range_alloc = edmm_range_alloc;
+
     uint64_t preheat_enclave_size = 0;
     ret = toml_sizestring_in(manifest_root, "sgx.preheat_enclave_size", /*defaultval=*/0,
                              &preheat_enclave_size);

@@ -15,6 +15,7 @@ struct pal_sgx_manifest_config {
     uint64_t preheat_enclave_size;
     uint64_t edmm_lazyfree_th;
     bool edmm_batch_alloc;
+    bool edmm_range_alloc;
 };
 
 int ecall_enclave_start(char* libpal_uri, char* args, size_t args_size, char* env, size_t env_size,

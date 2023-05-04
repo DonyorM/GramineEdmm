@@ -103,6 +103,7 @@ class Manifest:
         sgx.setdefault('preheat_enclave_size', '0')
         sgx.setdefault('edmm_lazyfree_th', 0)
         sgx.setdefault('edmm_demand_paging', 0)
+        sgx.setdefault('edmm_range_alloc', False)
 
 
         if not isinstance(sgx['trusted_files'], list):
