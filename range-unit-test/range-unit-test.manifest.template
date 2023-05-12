@@ -1,0 +1,29 @@
+# Hello World manifest file example
+
+loader.entrypoint = "file:{{ gramine.libos }}"
+libos.entrypoint = "range-unit-test"
+loader.log_level = "{{ log_level }}"
+
+loader.insecure__use_cmdline_argv = true
+loader.env.LD_LIBRARY_PATH = "/lib"
+
+
+fs.mounts = [
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+]
+
+sgx.debug = true
+sgx.nonpie_binary = true
+sgx.enclave_size = "{{ enclave_size }}"
+
+sgx.edmm_enable_heap = {{ edmm_heap }}
+sgx.preheat_enclave_size = {{ preheat_enclave_size }}
+sgx.edmm_lazyfree_th = {{ edmm_lazyfree_th }}
+sgx.edmm_demand_paging = {{ edmm_demand_paging }}
+sgx.edmm_range_alloc = {{ edmm_range_alloc }}
+
+sgx.trusted_files = [
+  "file:{{ gramine.libos }}",
+  "file:range-unit-test",
+  "file:{{ gramine.runtimedir() }}/",
+]

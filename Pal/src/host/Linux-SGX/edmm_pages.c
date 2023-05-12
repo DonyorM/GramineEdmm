@@ -517,6 +517,7 @@ int get_edmm_page_range(void* start_addr, size_t size, pal_prot_flags_t prot) {
     void* lo = start_addr;
     void* addr = (void*)((char*)lo + size);
 
+    // TODO figure out how to handle this when using demand paging, because exiting the enclave while doing demand paging will cause a segfault
     if (g_pal_linuxsgx_state.manifest_keys.edmm_range_alloc) {
         int ret = ocall_madvise(start_addr, size, MADV_WILLNEED);
         if (ret < 0 && !g_pal_linuxsgx_state.manifest_keys.edmm_demand_paging) { 
